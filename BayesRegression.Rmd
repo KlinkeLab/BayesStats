@@ -1,0 +1,281 @@
+---
+title: "Regression"
+author: "David Klinke"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Regression
+
+The focus today is on estimating parameters associated with a mathematical model of a system that relates observations of the behavior of the system, the independent variable, obtained at certain values of a dependent variable, like time. We are going to take a common approach and then diverge along two paths. One path focuses on a frequentist approach called point estimation, which desires to estimate the ``true" singular value of a parameter. The other path focuses on a Bayesian approach, which desires to estimate the distribution in parameter values that are supported by the data. In the following paragraphs, a couple of central ideas are discussed.
+
+### Probability Preliminaries
+
+A mathematical model describes a relationship between two variables, $x$ and $y$. We assume that $x$ is an independent variable that is known without error and $y$ is a dependent variable that is known with finite precision. You could plot the $x$-$y$ pairs, in the form of a scatter plot, to see if there is a trend between the two variables. The simplest trend is a line: $\hat{y}_i = m \cdot x_i + b$, where $m$ and $b$ are parameters. You would like to choose $m$ and $b$ such that the difference between the predicted ($\hat{y}_i$) and the observed ($y_i$) values of the dependent variable are minimized. To solve this problem, we will make three assumptions:
+
+1. The trends in the dependent variable can be described by a model ($M$): $\hat{y}_i = m \cdot x_i + b$, where $m$ and $b$ are parameters that we will denote collectively as $\theta$. We can also denote the model as a function of the parameters and the independent variable: $M(\theta, X)$.
+
+2. Any observations of the dependent variable include uncertainty associated with observing the system such that $y_i$ = $\hat{y}_i$ + $\epsilon$, where the error ($\epsilon$) represents this observational uncertainty. The error is assumed to be normally distributed with a zero mean and known variance, $\sigma^2$. All errors have equal variance. 
+
+3. The errors associated with each observation are independent samples from a normal distribution (N(0, $\sigma^2$)). 
+
+The idea that the errors are normally distributed comes from the Central Limit Theorem. The central limit theorem states that if you take a random sample, that is {$\epsilon_1$, $\epsilon_2$, ..., $\epsilon_n$}, from a distribution that can have any shape, the mean value of those samples is normally distributed. This implies that the shape of the limiting distribution is normal despite the original distribution not necessarily being normal. Interestingly, $n$ doesn't have to be particularly large for the shape to be approximately normal, $n \geq$ 25 is sufficient. 
+
+We can then express the probability for observing a particular event as:
+\begin{equation}
+P(y|\theta, M, x) = \frac{1}{\sigma \sqrt{2\pi}}\exp\left[-\frac{(y - M(\theta,x))^2}{2\sigma^2}\right].
+\end{equation}
+For multiple i.i.d. observations, we multiply the probabilities together such that:
+\begin{equation}
+P(y_1, y_2, y_3|\theta. M, x_1, x_2, x_3) = P(y_1|\theta, M, x_1)\cdot P(y_2|\theta, M, x_1)\cdot P(y_3|\theta, M, x_1).
+\end{equation}
+This leads to the following probability relationship for the collection of $n$ observations, $Y$:
+\begin{equation}
+P(Y|\theta, M, X) = \left[\frac{1}{\sigma \sqrt{2\pi}}\right]^n \cdot \exp\left[-\frac{1}{2} \sum_{i=1}^{n} \frac{(y_i - M(\theta, x_i))^2}{\sigma^2}\right].
+\end{equation}
+The likelihood observing the model predictions $M(\theta, X)$, given the data is defined as:
+\begin{equation}
+\mathcal{L}(M(\theta,X)|Y) = P(Y|M(\theta,X))
+\end{equation}
+Since the parameter values are the only value that is changing in the analysis, the likelihood is sometimes just depicted as $\mathcal{L}(\theta)$. In other words, the likelihood in this case is just a comparison between the model and the data - the closer the fit, the higher the likelihood.
+
+### Point Estimation
+The objective of point estimation is to find the single values of the parameters that provide the best fit between the model and the data. Two methods can be used: method of moments and maximum likelihood. The method of moments simply uses the mean and variance of the samples of a single random variable to provide values for the parameters associated with a particular distribution. The maximum likelihood approach is more widely used than the method of moments. We will use an example to explain this approach. 
+
+The maximum likelihood approach aims to find the parameter values $\theta$ that provide a maximum value for $\mathcal{L}(\theta)$. 
+
+Using the following form of the likelihood, 
+\begin{equation}
+\mathcal{L}(\theta) = \frac{C}{\sigma^n} \cdot \exp\left[-\frac{1}{2} \sum_{i=1}^{n} \frac{(y_i - \hat{y}_i(\theta))^2}{\sigma^2}\right]
+\end{equation}
+and assuming that the variance is constant, we want to find the maximum with respect to $\theta$. Recall that the maximum of a function is where the first derivative is equal to zero and the second derivative is negative. To simplify the analysis, we take to logarithm of the likelihood function as if $y$ at $x$ is a maximum then $log(y)$ at $x$ is also a maximum:
+\begin{equation}
+log[\mathcal{L}(\theta)] = l(\theta) = log \;C - n \;log \;\sigma - \sum_{i=1}^{n} \frac{(y_i - \hat{y}_i(\theta))^2}{2 \sigma^2}
+\end{equation}
+As $\frac{\partial}{\partial\theta} \approx \frac{\partial}{\partial\epsilon}$ and 
+\begin{equation}
+l(\epsilon) = log \;C - n \;log \;\sigma - \sum_{i=1}^{n} \frac{\epsilon_i^2}{2 \sigma^2},
+\end{equation}
+then the first derivative is 
+\begin{equation}
+\frac{\partial l(\epsilon)}{\partial\epsilon} = \frac{\partial }{\partial \epsilon}(log \;C) - \frac{\partial}{\partial \epsilon} (n \;log \;\sigma) - \frac{\partial}{\partial \epsilon} \sum_{i=1}^{n} \frac{\epsilon_i^2}{2 \sigma^2}.
+\end{equation}
+As the first two terms are equal to zero, 
+\begin{equation}
+\frac{\partial l(\epsilon)}{\partial\epsilon} = - 2 \sum_{i=1}^{n} \frac{\epsilon_i}{2 \sigma^2}
+\end{equation}
+and \begin{equation}
+\frac{\partial^2 l(\epsilon)}{\partial\epsilon^2} = - \frac{n}{\sigma^2}
+\end{equation}
+which indicates that the maximum occurs when $\sum_{i=1}^{n} \epsilon_i = 0$ as the second derivative is always negative. 
+
+### Bayesian approach
+
+Instead of taking the best fit values of the parameters, maybe we want to reason probabilistically about the parameter values, like is the slope parameter equal to zero ($\beta \neq 0$) or does the slope parameter vary between experimental conditions ($\beta_1 \neq \beta_2$). This reasoning ultimately depends on the quality and quantity of data that we have. Bayes theorem is always summarized by:
+\begin{equation}
+posterior \propto likelihood \times prior
+\end{equation}
+
+In terms of a regression problem this is:
+\begin{equation}
+\underbrace{P(\theta | Y, M)}_{\textrm{Posterior}} = \underbrace{P(Y | \theta, M)}_{\textrm{likelihood}} \cdot \underbrace{P(\theta|M)}_{\textrm{Prior}} / \underbrace{P(Y,M)}_{\textrm{evidence}} 
+\end{equation}
+
+Of note, the data ($Y$) and the model ($M$) are independent so $P(Y,M) = P(Y) \cdot P(M)$. So algorithmically, we can generate the posterior by sampling from the prior ($\theta_i$), evaluate the likelihood with $\theta_i$ ($P(Y|\theta_i, M, X)$), and repeat the process until you have covered the parameter space sufficiently. We then sum up these samples of the prior and the corresponding likelihood values to calculate the evidence. Dividing by the evidence normalizes the posterior so that it is a probability distribution. We can then use the posterior distribution to calculate summary statistics, like a mean or variance, or a predictive distribution of a function of $\theta$ ($f(X)$). 
+\begin{equation}
+       \mathbb{E}f(X) = \int_{all x} f(x) \cdot P(x) dx 
+\end{equation}
+One such use of the posterior distribution is to calculate a Bayes Factor, which is used for model selection.
+
+### Bayes factor for model selection
+
+Uncertainty in interpreting observations of the behavior of biological networks naturally leads to alternative hypotheses proposed for the same biological network. Model selection describes a number of qualitative and quantitative criteria used to discriminate among these competing hypotheses. The qualitative criteria speak to whether underlying assumptions in the approach remain valid or to whether the overall behavior of the model makes sense.\cite{2377-Box1965} For instance, the individual fits of the candidate models to the observed responses should be checked by analyzing the residuals, which should be normally distributed. The predicted individual responses should also be mutually consistent when a mathematical model is used to synthesize data obtained from different studies together. Quantitative model selection criteria have been developed that enable one to select the model that most closely describes the observed data using concepts drawn from statistics and information theory, as reviewed in Burnham and Anderson (. Model Selection and Multimodal Inference: A Practical Information-Theoretic Approach (2002)). The more simple model selection criteria, like the Akaike Information Criterion (AIC) (Akaike H. IEEE Trans Automat Control (1974)19:716-723; Yamaoka et al. J Pharmacokinet Biopharm (1978) 6:165-175) or Bayesian Information Criterion (BIC) (Schwarz Ann Stats (1978)6:461-464), consider the trade-off between how well the model captures the data, as commonly represented by the logarithm of the maximum likelihood or simply a summed squared error term ($C_i$), and a penalty associated with the number of parameters ($N_i$) and the number of experimental observations ($N_R$):
+\begin{eqnarray}
+\textrm{AIC} & = & C_i + 2 N_i\\
+\textrm{BIC} & = & C_i + N_i \cdot log (N_R)
+\end{eqnarray}
+The data favor the model with the lowest value for either criteria. While the AIC and BIC criteria have sound foundations in statistics and information theory and are easily calculated, the penalty terms are considered ad hoc (Kass and Raftery J Am Stat Assoc (1995) 90:773-795). There is also no way to account for model uncertainty, which makes it difficult to select among similarly scoring models. To address these concerns, a Bayes factor has been proposed by Kass and Raftery as a more general approach for model selection. The Bayes Factor ($B_{ij}$) quantifies the strength of evidence that favors model $i$ over model $j$:
+\begin{equation}
+B_{ij} = \frac{P(Y|M_i)}{P(Y|M_j)}.
+\end{equation}
+once the particular parameter values have been integrated out. Values for the $B_{ij}$ between 1 to 3 are considered weak, between 3 to 20 are positive, between 20 to 150 are strong, and greater than 150 are very strong evidence favoring model $i$ over model $j$. Specifically the posterior distribution in the parameters can be used to estimate:
+\begin{equation}
+P(Y|M_i) = \int_{\textrm{all }\theta} \underbrace{P(Y|\theta, M_i)}_{likelihood} \cdot \underbrace{P(\theta|Y, M_i)}_{\textrm{now }\theta \textrm{ posterior}} d\theta,
+\end{equation}
+which then gives a single value instead of a distribution. What is different now from the first step in estimating the posterior? Well in the previous integration, the prior ($P(\theta|M)$) could have been improper, meaning that it may not integrate to a finite value or to a value equal to 1. By construction, using the posterior in the integral here provides a finite value and the posterior integrates to a value of 1.   
+
+#### An example
+1. A researcher measured heart rate ($x$) and oxygen uptake ($y$) for one person under varying exercise conditions. They wish to determine if heart rate, which is easier to measure, can be used to predict oxygen uptake. If so, then the estimated oxygen uptake based on the measured heart rate can be used in place of the measured oxygen uptake for later experiments on individuals. The variance ($\sigma^2$) of the oxygen uptake measurement is known to be equal to $0.13^2$.  
+
+```{r data}
+HR <- c(94, 96, 94, 95, 104, 106, 108, 113, 115, 121, 131)
+OU <- c(0.47, 0.75, 0.83, 0.98, 1.18, 1.29, 1.40, 1.60, 1.75, 1.90, 2.23)
+data1 <- data.frame(HeartRate <- HR, O2Uptake <- OU)
+show(data1)
+```
+
+- Plot a scatterplot of oxygen uptake $y$ versus heart rate $x$.
+
+```{r xy plot}
+plot(data1$HeartRate, data1$O2Uptake, xlim = c(50, 150), type = "p")
+```
+
+- Calculate maximum likelihood values of parameters
+
+First let's set up a grid of slope and intercept values and generate a prior while we are at it.
+```{r set up prior}
+n <- 100 # grid points
+# intercept b is parameter 1 and slope m is parameter 2 
+h11 <- (2 - (-4))/n
+h12 <- (1 - (-1))/n
+bi <- seq(-4, 2, by = h11)
+mi <- seq(-1, 1, by = h12)
+
+wij <- matrix(c(0.25, rep(0.5, n-1), 0.25, rep(c(0.5, rep(1, n-1), 0.5), n-1), 
+              0.25, rep(0.5, n-1), 0.25), nrow = n+1, ncol = n+1, byrow = TRUE)
+b.vec <- matrix(data = bi, nrow = n+1, ncol = n+1, byrow = FALSE)
+# assuming prior values are equal to 1 - the particular value will cancel out
+b.prior <- matrix(data = 1, nrow = n+1, ncol = n+1, byrow = FALSE)
+
+m.vec <- matrix(data = mi, nrow = n+1, ncol = n+1, byrow = TRUE)
+m.prior <- matrix(data = 1, nrow = n+1, ncol = n+1, byrow = TRUE)
+
+theta.vec <- data.frame(b = as.vector(b.vec), m = as.vector(m.vec), prior = as.vector(b.prior)*as.vector(m.prior))
+```
+
+Next let's set up the calculation of the likelihood for every combination of parameter values. 
+
+```{r likelihood}
+likelihood1 <- function(b, m, y, x, sigma){
+  SSE <- sum((y - (m*x + b))^2)
+  ni <- length(y)
+  res <- (1/(2 * pi * sigma^2)^ni) * exp(- SSE/(2*sigma^2))
+  return(res)
+}
+
+likelihood.vec <- apply(theta.vec, 1, function(x) likelihood1(x['b'], x['m'], data1$O2Uptake, data1$HeartRate, 0.13))
+
+contour(bi, mi, matrix(likelihood.vec, nrow = n+1, ncol = n+1, byrow = FALSE), col = "red", xlab = "Intercept b", ylab = "Slope m")
+```
+
+Let's pick out the max value and graph the resulting line on the scatterplot.
+
+```{r max likelihood}
+idx <- which(likelihood.vec == max(likelihood.vec))
+b_ML <- theta.vec$b[idx]
+m_ML <- theta.vec$m[idx]
+xi <- seq(min(data1$HeartRate), max(data1$HeartRate), by = 1)
+plot(data1$HeartRate, data1$O2Uptake, xlab = "Heart Rate", ylab = "Oxygen Uptake")
+lines(xi, m_ML*xi + b_ML, col = "red")
+```
+
+Now let's do the Bayesian approach and integrate to estimate the ***Evidence*** and then the posterior.
+
+```{r evidence}
+likelihood.prior.vec <- apply(theta.vec, 1, function(x) likelihood1(x['b'], x['m'], data1$O2Uptake, data1$HeartRate, 0.13) * x['prior'])
+
+Evidence <- h11*h12*sum(as.vector(wij)*likelihood.prior.vec)
+Posterior1 <- likelihood.prior.vec/Evidence
+
+contour(bi, mi, matrix(Posterior1, nrow = n+1, ncol = n+1, byrow = FALSE), col = "red", xlab = "Intercept b", ylab = "Slope m")
+```
+
+- Perform a two-sided test to see if the slope is non-zero, that is:
+\begin{equation}
+H_0: \beta = 0 \textrm{   versus   } H_1: \beta \neq 0
+\end{equation}
+```{r junk}
+Pvalue <- 100*h11*h12*sum(Posterior1[theta.vec$m > 0])
+```
+
+The results suggest that `r format(Pvalue, digits = 5)`% of the posterior distribution supports a positive non-zero value for the slope. Thus we would reject the null hypothesis. 
+
+- Now consider that the relationship between heart rate and oxygen consumption is not linear but follows a sigmoidal shape:
+\begin{equation}
+y = \frac{\theta_1 \cdot x^4}{\theta_2 + x^4}
+\end{equation}
+
+```{r set up prior 2}
+n <- 100 # grid points
+# parameter 1 is max value and parameter 2 is x at half-max
+h21 <- (20 - 0)/n
+h22 <- (200^4 - 50^4)/n
+t1i <- seq(0, 20, by = h21)
+t2i <- seq(50^4, 200^4, by = h22)
+
+wij <- matrix(c(0.25, rep(0.5, n-1), 0.25, rep(c(0.5, rep(1, n-1), 0.5), n-1), 
+              0.25, rep(0.5, n-1), 0.25), nrow = n+1, ncol = n+1, byrow = TRUE)
+t1.vec <- matrix(data = t1i, nrow = n+1, ncol = n+1, byrow = FALSE)
+# assuming prior values are equal to 1 - the particular value will cancel out
+t1.prior <- matrix(data = 1, nrow = n+1, ncol = n+1, byrow = FALSE)
+
+t2.vec <- matrix(data = t2i, nrow = n+1, ncol = n+1, byrow = TRUE)
+t2.prior <- matrix(data = 1, nrow = n+1, ncol = n+1, byrow = TRUE)
+
+theta2.vec <- data.frame(t1 = as.vector(t1.vec), t2 = as.vector(t2.vec), prior = as.vector(t1.prior)*as.vector(t2.prior))
+```
+
+Next let's set up the calculation of the likelihood for every combination of parameter values and calculate the Posterior for this new model. 
+
+```{r likelihood2}
+likelihood2 <- function(t1, t2, y, x, sigma){
+  # Here is where we change the model
+  SSE <- sum((y - (t1*x^4/(t2 + x^4)))^2)
+  ni <- length(y)
+  res <- (1/(2 * pi * sigma^2)^ni) * exp(- SSE/(2*sigma^2))
+  return(res)
+}
+
+likelihood2.prior.vec <- apply(theta2.vec, 1, function(x) likelihood2(x['t1'], x['t2'], data1$O2Uptake, data1$HeartRate, 0.13) * x['prior'])
+
+Evidence2 <- h21*h22*sum(as.vector(wij)*likelihood2.prior.vec)
+Posterior2 <- likelihood2.prior.vec/Evidence2
+
+contour(t1i, t2i, matrix(Posterior2, nrow = n+1, ncol = n+1, byrow = FALSE), col = "red", xlab = "Parameter 1", ylab = "Parameter 2")
+```
+
+For fun, let's pick out the max value and graph the resulting prediction for this new model on the scatterplot.
+
+```{r max likelihood2}
+idx <- which(likelihood2.prior.vec == max(likelihood2.prior.vec))
+t1_ML <- theta2.vec$t1[idx]
+t2_ML <- theta2.vec$t2[idx]
+xi <- seq(min(data1$HeartRate), max(data1$HeartRate), by = 1)
+plot(data1$HeartRate, data1$O2Uptake, xlab = "Heart Rate", ylab = "Oxygen Uptake")
+lines(xi, t1_ML * xi^4 / (t2_ML + xi^4), col = "red")
+```
+
+Let's compare the error for the two models
+
+```{r error plots}
+Err_M1 <- data1$O2Uptake - (m_ML * data1$HeartRate + b_ML)
+Err_M2 <- data1$O2Uptake - (t1_ML * data1$HeartRate ^4 / (t2_ML + data1$HeartRate^4))
+plot(data1$HeartRate, Err_M1, type = "p", col = "black", xlab = "Heart Rate", ylab = "Error", ylim = c(-0.35, 0.35))
+points(data1$HeartRate, Err_M2, col = "red")
+lines(c(min(data1$HeartRate), max(data1$HeartRate)), c(0,0), lty = 2)
+```
+
+Now calculate the Bayes Ratio.
+
+```{r BayesFactor}
+theta3.vec <- data.frame(b = as.vector(b.vec), m = as.vector(m.vec), posterior = Posterior1)
+
+integrand1 <- apply(theta3.vec, 1, function(x) likelihood1(x['b'], x['m'], data1$O2Uptake, data1$HeartRate, 0.13) * x['posterior'])
+
+BayesFactor1 <- h11*h12*sum(as.vector(wij)*integrand1)
+
+theta4.vec <- data.frame(t1 = as.vector(t1.vec), t2 = as.vector(t2.vec), posterior = Posterior2)
+
+integrand2 <- apply(theta4.vec, 1, function(x) likelihood2(x['t1'], x['t2'], data1$O2Uptake, data1$HeartRate, 0.13) * x['posterior'])
+
+BayesFactor2 <- h21*h22*sum(as.vector(wij)*integrand2)
+
+BayesRatio <- BayesFactor2/BayesFactor1
+
+```
+
+The results suggest that the Bayes Ratio of `r format(BayesRatio, digits = 5)` supports that the linear model is a better description of the data.  

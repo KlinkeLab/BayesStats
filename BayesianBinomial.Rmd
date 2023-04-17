@@ -1,0 +1,226 @@
+---
+title: "BMEG 601: Bayes Binomial"
+author: "David Klinke"
+date: "2022-10-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list = ls())
+```
+
+## Bayesian Inference for a Binomial Proportion
+
+Statistical studies typically have one of three goals. The **first goal** is to estimate parameter values that relate an independent to a dependent random variable. **Second**, one might predict the value of a dependent variable given a value of the independent random variable. The **third goal** is to compare or select models that relate independent to dependent variables.
+
+### A small example
+Let's consider a simple example where we will take a Bayesian approach. Consider nine people have contracted a disease. Only two of them have recovered. What is the probability of recovery from this disease? How certain are you of that number?
+
+Typically we talk about independent and dependent variables. In this case, the independent variable is the number of people that have contracted a disease. The dependent variable is the number that have recovered. This is a dependent variable because the specific number depends on how many people contracted the disease. The relationship between these two variables that we will call the model. Here the model is a binomial distribution. 
+
+A Bernoulli random variable is a discrete random variable that predicts the success or failure of a single trial that has a defined probability of success. A binomial distribution is an extension of a Bernoulli random variable but describes the results for a small number of independent Bernoulli trials. It is defined by:
+\begin{equation}
+P(X \textrm{ in } n|p) = \left(\frac{n}{X}\right) p^X (1 - p)^{n-X}
+\end{equation}
+where $X$ is the number of successes in $n$ independent tries with a probability of success equal to parameter $p$. 
+
+Here though, we want to know: $P(p | X \textrm{ in } n)$ or more generally we can express this conditional probability as $P(\theta | data)$, where $\theta$ represents the parameters. Using Bayes theorem, we can expand this probability in the following terms:
+\begin(equation}
+P(\theta | data) \cdot P(data) = P(data | \theta) \cdot P(\theta).
+\end{equation}
+Of note, I'm neglecting a common covariate to all of the terms, which is the model $M$. For this example, the model corresponds to a binomial distribution, which has a single parameter $p$. We'll come back to this point later as it relates to the third goal of a statistical analysis. 
+
+We can rearrange this equation to solve for $P(\theta | data)$:
+\begin{equation}
+\underbrace{P(\theta | data)}_{\textrm{Posterior}} = \underbrace{P(data | \theta)}_{\textrm{likelihood}} \cdot \underbrace{P(\theta)}_{\textrm{Prior}} / \underbrace{P(data)}_{\textrm{evidence}} 
+\end{equation}
+
+The **prior** represents our belief in what the parameter values might be before analyze the data in hand. In some introductory texts that rely on pen-and-paper methods to start, this is where they introduce what is call conjugate priors. That is a mathematical form of a prior that has the same form as the posterior, which makes the math analytically solvable. We're going to take a computational approach and assume what is called a non-informative prior. That is, we assume equal ignorance for any particular value of the parameter. As specifying a prior is the source of much debate, you can choose whatever reference distribution that you want. It is helpful to have the prior integrate to a finite value and have a non-zero value for any parameter values that there might be a chance that they could explain the data.   
+```{r set up prior, echo=TRUE}
+Param <- seq(0, 1, by = 0.01)
+Prior <- rep(1, length(Param))
+Init <- data.frame(Parameter = Param, Prior = Prior)
+# add some zeros to the front and end to make the plot prettier
+plot(c(0, Init$Parameter, 1), c(0, Init$Prior, 0), type = "l", col = "red", xlab = "Parameter Value", ylab = "P(theta)", ylim = c(0, 3))
+```
+
+The **likelihood** corresponds to the likelihood for observing data similar to that actually observed, given a particular value of the model parameter. 
+```{r calculate likelihood*prior, echo=TRUE}
+likelihood.prior <- apply(Init, 1, function(x) dbinom(2, 9, x['Parameter']) * x['Prior'])
+```
+
+The term **evidence** can be a bit confusing. It is essentially accounting for all possible ways that these data could be generated. In other words, the **evidence** corresponds to:
+\begin{equation}
+P(data) = \int_{\textrm{all } \theta} P(data | \theta) \cdot P(\theta) d\theta
+\end{equation}
+Calculating the evidence is where numerical integration comes into play. So for this example, we have already calculated the product of the likelihood times the prior for a set of parameter values that span the entire interval $[0, 1]$. Let's use a trapezoidal approach to integrate over the interval $[0, 1]$ for $\theta$. 
+
+```{r evidence, echo=TRUE}
+ntrap <- length(likelihood.prior) - 1
+h <- (1 - 0)/ntrap
+Evidence <- h*(likelihood.prior[1]/2 + sum(likelihood.prior[2:ntrap]) + likelihood.prior[ntrap+1]/2)
+```
+Then to calculate the posterior, we have to divide the values obtained for the product of $likelihood \cdot prior$ by the $Evidence$. This provides a distribution of values for the posterior for each value of the parameter $\theta$. Of note, by dividing by the evidence, we are ensuring that the posterior distribution integrates to 1 and that it is a probability distribution.
+```{r calculate posterior}
+Posterior <- likelihood.prior/Evidence
+Posterior
+```
+Using the posterior, we can then address the first objective of a statistical analysis: we can estimate the value of the parameter with the highest likelihood.
+```{r calculate max value}
+# where is maximum
+Parameter.max <- Init$Parameter[which.max(Posterior)]
+Parameter.max
+```
+We can also estimate the range of values that we are most confident. This is expressed in terms of a high density interval that contains 95\% of the posterior distribution (95\% HDI). We can summarize the results so far by plotting the prior and posterior distributions and annotate the graph with these key values of the parameter.
+```{r calculate high density interval}
+# let's determine 95% High Density Interval
+lx <- 2
+lefttail = 0
+while (lefttail < 0.025){
+  if(lx == 2){
+    lefttail = h/2*sum(likelihood.prior[1:lx])/Evidence
+  } else {
+    lefttail = h/2*(likelihood.prior[1] + 2*sum(likelihood.prior[2:lx-1]) + likelihood.prior[lx])/Evidence
+  }
+  lx <- lx + 1
+}
+
+rx <- length(likelihood.prior)
+righttail = 1
+while (righttail > 0.975){
+  righttail = h/2*(likelihood.prior[1] + 2*sum(likelihood.prior[2:rx-1]) + likelihood.prior[rx])/Evidence
+  rx <- rx - 1
+}
+
+plot(Init$Parameter, Posterior, type = "p", col = "blue", xlab = "Parameter", ylab = "Probabilities")
+lines(c(0, Init$Parameter, 1), c(0, Init$Prior,0), col = "red")
+lines(c(Init$Parameter[lx], Init$Parameter[rx]), c(1.5, 1.5), lwd = 2, lty = 2, col = "black")
+lines(c(Parameter.max, Parameter.max), c(0, 3.1), lwd = 2, lty = 2, col = "green")
+text(Init$Parameter[lx], 1.7, label = as.character(Init$Parameter[lx]))
+text(Init$Parameter[rx], 1.7, label = as.character(Init$Parameter[rx]))
+text(0.4, 3.0, label = paste("Maximum at", Parameter.max), col = "darkgreen")
+```
+
+### Making predictions informed by data
+The second objective of a statistical analysis is to make predictions. So here we can make a prediction. If we were to run a set of independent experiments again using a sample of nine people, how many of them would recover, given our predicted distribution in the probability in recovery. In this case, the unknown variable in the model is the number that recover. To calculate this number, we need to use a value for the probability of recovery drawn from the posterior distribution. 
+
+So how to we use this posterior distribution to generate a set of random numbers that have the same distribution. To do this, we will use a cumulative probability distribution of the posterior and then use a spline function to interpolate between the data points.    
+```{r calculate cumulative probability distribution}
+# Calculate cumulative probability distribution of posterior
+cdf <- rep(0, length(Posterior))
+for (i in 2:length(Posterior)){
+  if(i == 2){
+    cdf[i] = h/2*sum(Posterior[1:i])
+  } else {
+    cdf[i] = h/2*(Posterior[1] + 2*sum(Posterior[2:i-1]) + Posterior[i])
+  }
+}
+Pcdf <- splinefun(Init$Parameter, cdf)
+
+plot(seq(0,1, by = 0.01), Pcdf(seq(0,1,by = 0.01)), type ="l", xlab = "Parameter value", ylab = "Cumulative Probability Distribution")
+```
+
+A cumulative distribution function is a one-to-one function that maps each value of the parameter to a unique cumulative probability. We can use the inverse of the cumulative probability distribution to create a transform that converts uniformly distributed random numbers to numbers that are randomly distributed according to the posterior.
+
+```{r inv cdf}
+Inv.cdf <- splinefun(cdf, Init$Parameter)
+
+plot(seq(0,1, by = 0.01), Inv.cdf(seq(0,1,by = 0.01)), type = "l", xlab = "Uniform(0,1)", ylab = "Parameter value")
+```
+
+
+```{r Posterior prediction}
+# Predict number of given posterior
+# Pick a random number from uniform distribution 
+# and use to generate a random sample of the posterior
+posterior.predict <- function(n = 100){
+  res <- rep(0, n)
+  for (i in 1:n){
+    rcdf <- Inv.cdf(runif(1))
+    res[i] <- rbinom(1, 9, rcdf)
+  }
+  return(res)
+}
+  
+result1 <- hist(posterior.predict(1000))  
+```
+
+We can compare this data-driven distribution of the number of recovered out of nine patients, shown in gray bars, against the distribution obtained by assuming a probability of recovery equal to 0.22 with no uncertainty, which is shown in blue.  
+```{r predict ideal distribution}
+
+# Predict number of given posterior
+# Pick a random number from uniform distribution 
+# and use to generate a random sample of the posterior
+ave.predict <- function(n = 100){
+  res <- rep(0, n)
+  for (i in 1:n){
+    res[i] <- rbinom(1, 9, 0.22)
+  }
+  return(res)
+}
+
+hist(posterior.predict(1000), ylim = c(0, 400))  
+hist(ave.predict(1000), breaks = result1$breaks, add = TRUE, col = NULL, border = "blue")
+
+``` 
+
+## Now consider that you have more data
+
+Now let's change the number of trials with the same ratio of "successes" 20 in 90 and see how it changes the results. Using the same prior, we calculate new values for the likelihood assuming a binomial distribution.
+
+```{r Case 2 with more data}
+# Code for Bayesian Binomial using more data, same prior
+likelihood.prior <- apply(Init, 1, function(x) dbinom(20, 90, x['Parameter']) * x['Prior'])
+```
+Now calculate the evidence for this new case. 
+```{r new integration}
+ntrap <- length(likelihood.prior) - 1
+h <- (1 - 0)/ntrap
+Evidence <- h*(likelihood.prior[1]/2 + sum(likelihood.prior[2:ntrap]) + likelihood.prior[ntrap+1]/2)
+Posterior <- likelihood.prior/Evidence
+```
+We can calculate the maximum likelihood value for the new case.
+```{r new max}
+# where is maximum
+Parameter.max <- Init$Parameter[which.max(Posterior)]
+Parameter.max
+```
+Now, calculate the 95\% high density interval to estimate the uncertainty associated with the parameter for the new case.
+```{r Determine HDI case 2}
+# let's determine 95% High Density Interval
+lx <- 2
+lefttail = 0
+while (lefttail < 0.025){
+  if(lx == 2){
+    lefttail = h/2*sum(likelihood.prior[1:lx])/Evidence
+  } else {
+    lefttail = h/2*(likelihood.prior[1] + 2*sum(likelihood.prior[1:lx-1]) + likelihood.prior[lx])/Evidence
+  }
+  lx <- lx + 1
+}
+
+rx <- length(likelihood.prior)
+righttail = 1
+while (righttail > 0.975){
+  righttail = h/2*(likelihood.prior[1] + 2*sum(likelihood.prior[1:rx-1]) + likelihood.prior[rx])/Evidence
+  rx <- rx - 1
+}
+
+plot(Init$Parameter, Posterior, type = "p", col = "blue")
+lines(c(0, Init$Parameter, 1), c(0, Init$Prior,0), col = "red")
+lines(c(Init$Parameter[lx], Init$Parameter[rx]), c(1.5, 1.5), lwd = 2, lty = 2, col = "black")
+lines(c(Parameter.max, Parameter.max), c(0, 8.1), lwd = 2, lty = 2, col = "green")
+text(Init$Parameter[lx], 1.7, label = as.character(Init$Parameter[lx]))
+text(Init$Parameter[rx], 1.7, label = as.character(Init$Parameter[rx]))
+text(0.4, 8.0, label = paste("Maximum at", Parameter.max), col = "darkgreen")
+
+```
+Some points of discussion. 
+
+- How did the posterior change between the first case and second case? 
+- What does the average value of probability of recovery represent? 
+- What can you say about the values of the likelihood with respect to how they contribute to the integral?
+- Does the posterior distribution change if you use the posterior from case 1 as a prior for case 2? Does that give you a different result than say taking a uniform prior and using the data from the two cases combined?
+

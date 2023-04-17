@@ -1,0 +1,194 @@
+---
+title: "Bayes Poisson"
+author: "David Klinke"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Bayesian Inference for a Poisson Rate Parameter
+
+The Poisson distribution is a common model for rare events and events occurring at random over an interval of time or space. Example applications range from industrial manufacturing, traffic safety, physics, and biology. It is related to a binomial random variable. It is in applications where 1) the number of trials is very large and 2) the probability of success becomes very small to same proportion as the number of trials such that $n\cdot p$ is a constant, which is expressed as the model parameter. Specifically the probability density function for a Poisson random variable relates the number of "successes" $x$ that occur within a time or space interval $z$ and at a rate $\eta$ of "successes" per unit time/space interval:
+\begin{equation}
+f(x, z, \eta) = \frac{(\eta z)^x \exp^{-\eta z}}{x!}
+\end{equation}
+Of note, sometimes $z$ and $\eta$ are combined into the single parameter $\lambda$:
+\begin{equation}
+f(x,\lambda) = \frac{\lambda^x \exp^{-\lambda}}{x!}
+\end{equation}
+
+This relation is commonly used in one of two ways: 
+
+- Specifying the probability for a specific number of "success" events to occur in a given interval: $f(x | z, \eta)$, where $z$ is commonly equal to 1.
+- Specifying the probability for an interval of time or space between events: $f(z | x, \eta)$, where $x$ is commonly equal to 1.
+
+Like binomial/Bernoulli distributions, the occurrence of each "success" is considered independent of any other "success".
+
+So the likelihood of an interval (of time) between Poisson events is then:
+\begin{equation}
+P(z_1|\eta) = \eta \cdot z_1 \cdot \exp^{-\eta \cdot z_1}
+\end{equation}
+
+Since each Poisson event is independent, the likelihood for a series of intervals (of time) between events is the product of each event:
+\begin{eqnarray}
+P(z_1, ... , z_n|\eta) &= &P(z_1|\eta) \cdot ... \cdot P(z_n|\eta)\\
+  & = & \eta^n \cdot \underbrace{\Pi_{i = 1}^n z_i}_{\textrm{cancels out}} \cdot \exp^{-\eta \sum_{i = 1}^n z_i}
+\end{eqnarray}
+
+Alternatively, the likelihood of a certain number of Poisson "successes" per unit interval (of time) is:
+\begin{equation}
+P(x_1|\eta) = \frac{\eta^x \cdot \exp^{-\eta}}{x!}
+\end{equation}
+
+Given the independence of events, the likelihood for a series of event collections observed over a sequence of common intervals (of time) is the product of each event collection:
+\begin{equation}
+P(x_1, ... , x_n|\eta) = \frac{\eta^{\sum x_i} \cdot \exp^{-n \eta}}{\underbrace{\Pi_{i = 1}^n x_i!}_{\textrm{cancels out}}}
+\end{equation}
+
+## Example using a Poisson model to answer a two-sided question
+
+As mentioned previously, a corollary of the **first goal** of a statistical analysis is to make a decision basedon the confidence associated with an estimated parameter. Previously, we had only considered estimating a parameter value of one group and comparing the parameter distribution to a reference value. If we had a certain degree of confidence that the distribution was greater or less than the reference, we made a decision. This approach is typically called a one-sided test. Here we are going to do a two-sided test applied to the difference between two parameters, $\theta_1$ and $\theta_2$, that each summarize the observation obtained from two different groups. Typically this two-sided test is framed as two alternative hypotheses:
+
+- $H_0$: $\theta_1 - \theta_2 = 0$
+- $H_1$: $\theta_1 - \theta_2 \neq 0$
+
+The hypothesis $H_0$ is called the null hypothesis, that is the results are explained by random chance, and implies that it is true for a single value of the difference between the two variables. First a word about point estimates, since we will be using posterior distributions in the parameter values to make a decision and that the posterior represents a distribution in a continuous random variable: $\theta_d = \theta_1 - \theta_2$. While this framing of hypothesis is typical, recall that the probability of a  continuous random variable taking any singular value is always 0. Instead, we will use the high density interval for $\theta_d$ and reason in this way. If 0 lies in the interval, we cannot exclude the possibility that the 0 is a credible value for the difference between the means and, thus, cannot reject the null hypothesis. However, if 0 lies outside the high density interval constructed at the significance level $\alpha$, then 0 is no longer a credible value and we can reject the null hypothesis. 
+
+In simple cases where there are only two alternative hypotheses, rejection of the null hypothesis leaves only the alternative hypothesis. This framing of the question, however, can be problematic. By rejecting the null hypothesis, all we can really say is that any difference in the results are not explained by random chance. We will discuss this more when we get to model discrimination and regression. 
+
+Let's revisit an early example related to industrial safety. The data shown in the table below is a four-year record of the number of ``recordable'' safety incidents occurring at a plant site each month.
+ 
+```{r training data}
+# Training data
+y1 <- c(1 , 0 , 0 , 0 , 2 , 2 , 0 , 0 , 0 , 1 , 0 , 1,
+  0 , 1 , 0 , 1 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 1,
+  2 , 2 , 0 , 1 , 2 , 0 , 1 , 2 , 1 , 1 , 0 , 0,
+  0 , 1 , 0 , 0 , 0 , 0 , 0 , 0 , 1 , 0 , 0 , 1) 
+```
+
+Since safety incidences are relatively rare and each event is considered independent, we are going to use a Poisson model to represent these data. In this case, the number of incidence are recorded over a sequence of common intervals, which is this case was 1 month. The likelihood for observing this collection of events is given by:
+
+\begin{equation}
+P(x_1, ... , x_n|\eta) \propto \eta^{\sum x_i} \cdot \exp^{-n \eta}
+\end{equation}
+
+where $\eta$ is the parameter that quantifies the incidence rate. 
+
+Assuming that this is a reasonable model, we want to answer the question: **If, over the most recent four-month period, the plant recorded 1, 3, 2, 3 safety incidents respectively, is there evidence that there has been a ``real increase'' in the number of safety incidents?**
+
+```{r test data}
+y2 <- c(1, 3, 2, 3)
+```
+
+So essentially we want to use the data in the table to estimate a base incidence rate, $\eta_1$. Using the data for the four-month period, we want to know if the incidence rate for this test period, $\eta_2$, is different than the base incidence rate. Since all safety incidents are independent and identically distributed, the joint probability is the product of the probability of both sets of events:
+\begin{equation}
+P(x_{11}, ... , x_{1n}, x_{21}, ... , x_{2m}|\eta_1, \eta_2) \propto \eta_1^{\sum_{\textrm{all n}} x_i} \cdot \eta_2^{\sum_{\textrm{all m}} x_j} \cdot \exp^{-1 \cdot(n \eta_1 + m \eta_2)}, 
+\end{equation}
+where $n$ is the number of periods observed for the base period and $m$ is the number of periods (4) observed for the test period.
+
+Since the Poisson model now has two parameters, $\eta_1$ and $\eta_2$, we will have to do two dimensional integration. We will also use the same flat prior for both parameters, which will range from 0 to 1. This will ensure that the parameter values are positive.  
+
+```{r calc}
+n <- 100 # grid points
+# eta1 is parameter 1 and eta2 is parameter 2
+h <- 1/n
+etai <- seq(0, 1, by = h)
+wij <- matrix(c(0.25, rep(0.5, n-1), 0.25, rep(c(0.5, rep(1, n-1), 0.5), n-1), 
+                0.25, rep(0.5, n-1), 0.25), nrow = n+1, ncol = n+1, byrow = TRUE)
+eta1.vec <- matrix(data = etai, nrow = n+1, ncol = n+1, byrow = FALSE)
+# assuming prior values are equal to 1 - the particular value will cancel out
+eta1.prior <- matrix(data = 1, nrow = n+1, ncol = n+1, byrow = FALSE)
+
+eta2.vec <- matrix(data = etai, nrow = n+1, ncol = n+1, byrow = TRUE)
+eta2.prior <- matrix(data = 1, nrow = n+1, ncol = n+1, byrow = TRUE)
+
+theta.vec <- data.frame(eta1 = as.vector(eta1.vec), eta2 = as.vector(eta2.vec), prior = as.vector(eta1.prior)*as.vector(eta2.prior))
+
+likelihood <- function(eta1, eta2, y1, y2){
+  n <- length(y1)
+  m <- length(y2)
+  res <- (eta1^sum(y1) * eta2^sum(y2) * exp(- (n * eta1 + m * eta2)))
+  return(res)
+}
+
+likelihood.prior.vec <- apply(theta.vec, 1, function(x) X = likelihood(x['eta1'], x['eta2'], y1, y2) * x['prior'])
+Evidence <- h*h*sum(as.vector(wij)*likelihood.prior.vec)
+
+Posterior <- likelihood.prior.vec/Evidence
+plot(c(0, 1), c(0,1), type = "l", lty = 2, xlab = "eta 1", ylab = "eta 2")
+contour(etai, etai, matrix(Posterior, nrow = n+1, ncol = n+1, byrow = FALSE), col = "red", add = TRUE)
+```
+
+Looking at the contour plot, we see that the posterior is up against the boundary of the prior for $\eta_2$ implying that it's posterior density includes values greater than 1. We can increase the range of the priors to go from 0 to 5 and redo the analysis.
+
+```{r calc 2}
+n <- 100 # grid points
+# eta1 is parameter 1 and eta2 is parameter 2
+h <- 5/n
+etai <- seq(0, 5, by = h)
+eta1.vec <- matrix(data = etai, nrow = n+1, ncol = n+1, byrow = FALSE)
+# assuming prior values are equal to 1 - the particular value will cancel out
+
+eta2.vec <- matrix(data = etai, nrow = n+1, ncol = n+1, byrow = TRUE)
+
+theta.vec <- data.frame(eta1 = as.vector(eta1.vec), eta2 = as.vector(eta2.vec), prior = as.vector(eta1.prior)*as.vector(eta2.prior))
+
+likelihood.prior.vec <- apply(theta.vec, 1, function(x) X = likelihood(x['eta1'], x['eta2'], y1, y2) * x['prior'])
+Evidence <- h*h*sum(as.vector(wij)*likelihood.prior.vec)
+
+Posterior <- likelihood.prior.vec/Evidence
+plot(c(0, 5), c(0,5), type = "l", lty = 2, xlab = "eta 1", ylab = "eta 2")
+contour(etai, etai, matrix(Posterior, nrow = n+1, ncol = n+1, byrow = FALSE), col = "red", add = TRUE)
+```
+
+The null hypothesis correspond to the diagonal dotted line in the figure - where $\eta_1 = \eta_2$. We can see from the plot that the majority of the posterior distribution is above the diagonal, it is likely that we will reject the null hypothesis. But to be more precise, we can calculate the percentage of the posterior distribution that resides above the diagonal.
+
+```{r calculate percentage}
+Confidence <- 100*sum(h*h*Posterior[theta.vec$eta2 > theta.vec$eta1])
+```
+
+The calculations suggest that `r format(Confidence, digits = 5)`% of the posterior distribution falls above $\eta_1 = \eta_2$. We can then reject the null hypothesis and conclude that there appears to be a change in the number of safety incidence in the most recent four-month period. 
+
+### Some additional problems
+
+**1.** A quality control engineer at a semi-conductor manufacturing site is concerned about the number of contaminant particles (flaws) found on each standard size silicon wafer produced at the site. A sample of 20 silicon wafers selected and examined for flaws produced the result (the number of flaws found on each wafer) shown in the following table.\
+    
+```{r table1, echo=FALSE, message = FALSE, warnings = FALSE}
+tabl <- "
+|  A sample of wafer flaws     |
+|------------------------------|
+| 3  0  0  2  3  0  3  2  1  2 |
+| 4  1  2  3  2  1  2  4  0  1 |
+"
+cat(tabl)
+```
+
+(i) For this particular problem, what is the random variable, $X$, the set $\{x_i\}_{i=1}^n$, and why is the Poisson model, with the single parameter $\lambda$, a reasonable probability model for the implied phenomenon?
+
+(ii) Calculate the posterior distribution for $P(\lambda | X)$. 
+
+(iii) Given that the incidence rate parameter $\lambda$ is thought to be one of three values - 0.5, 1.0, and 1.5 - which of the postulated population parameter values appears more representative of observations?
+
+**2.** The time in months between occurrences of safety violations in a chemical manufacturing facility is shown in the table below.
+
+```{r table2, echo=FALSE, message = FALSE, warnings = FALSE}
+tabl <- "
+|      Time in months between safety violations     |
+|---------------------------------------------------|
+| 1.31 0.15 3.02 3.17 4.84 0.71 0.70 1.41 2.68 0.68 |	
+| 1.94 3.21 2.91 1.66 1.51 0.30 0.05 1.62 6.75 1.29 |
+| 0.79 1.22 0.65 3.90 0.18 0.57 7.26 0.43 0.96 3.76 |
+"
+cat(tabl)
+```
+
+(i) Assuming that the data conform with a Poisson distribution, determine the posterior distribution of incidence rate parameter, given the data.
+
+(ii) Using the posterior distribution of the incidence rate parameter,  compute the theoretical probability of going more than 2 months without a safety violation.  
+
+(iii) In actual fact, the data were obtained for three different operators and have been arranged accordingly: the first row is for **Operator $A$**, the second row, for **Operator $B$**, and the third row for **Operator $C$**.  It has been a long-held preconception in the manufacturing facility that **Operator $A$** is more safety-conscious than the other two. Assess with 95% confidence whether that statement is consistent with the acquired data.
+
+

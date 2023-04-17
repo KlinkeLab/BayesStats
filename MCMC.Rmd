@@ -1,0 +1,285 @@
+---
+title: "Markov Chain Monte Carlo"
+author: "David Klinke"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Markov Chain Monte Carlo
+
+We have observed a number of examples where the numerical calculations seem inefficient, that is there are a number of evaluations that don't contribute to the overall result. For example, we calculated the mass remaining in a certain spatial area as a function of time when the mass diffuses in 2-dimensions. One of the challenges with getting a good answer at shorter times was that the concentration is concentrated in one area. How well/poor the numerical approach, like either Simpson or Monte Carlo methods, performs depended on whether the samples are in the region of high concentration. In another example, we calculated the posterior distributions for parameters of a model using a 2-dimensional grid of the parameter space and a trapezoidal method. For many of the points in the grid, we noticed that the likelihood evaluation was close to zero. Collectively, wouldn't it be better if we just focused on the points sampled in the regions where the concentration/likelihood is high?
+
+In these prior examples, we used a numerical approach for solving the integration problem:
+\begin{equation}
+       \mathbb{E}f = \int_{all \theta} f(\theta) \cdot P(\theta) d\theta 
+\end{equation}
+because, in many cases, we didn't know the closed form solution. In contrast to the solutions that use either a grid or random samples, we can also use the computer to preferentially sample the high density regions. To simulate it, we need to introduce a type of random process called a Markov Chain.
+
+Markov chains are a sequence of states - think points in parameter space - that are sampled and included in the growing chain according to some probabilistic laws. A Markov Chain is one in which the joint probability for the occupancy of the state space:
+\begin{equation}
+P(X^0 = x_0, X^1 = x_1, X^2 = x_2)
+\end{equation}
+only depends on the previous state:
+\begin{equation}
+P(X^n = x_n | X^{n-1} = x_{n-1}).
+\end{equation}
+This can be thought of as a 1st order approximation to the underlying density distribution. The most important information about a new state is where it starts or it's current local environment, it doesn't matter what happened in the past. 
+
+A example of such a scenario is the reaction rate for the formation of a polymer. Specifically, the addition of a new monomer to the growing polymer chain doesn't depend on the length of the polymer but just the reactivity of the end of the chain. Thus a key idea related to a Markov Chain is that it is time invariant, which means that the transition state (i.e., whether a new step is included in the chain) depends on the current state not how long the chain is, where the number of steps in the chain is equated to ``time".
+
+So if we have a time-invariant Markov Chain that are:
+
+- irreducible - meaning that the chain can reach state $i$ from state $j$ and vice versa.
+
+- aperiodic - it doesn't visit a specific state at some multiple, that is it's not random.
+
+- and where all states are positive recurrent - that there is a certain positive probability of returning to a specific state
+
+If these conditions are true, then we have a "ergodic" chain. An "ergodic" chain is a Markov Chain that represents samples from a probability distribution. So then, the transition probability, which is the decision to include or reject a proposed new step in the chain, is critical to how an algorithm performs. A Markov Chain is said to be reversible when the backwards Markov Chain and the forward Markov Chain have the same transition probability:
+\begin{equation}
+\Pi_i \cdot P_{i \rightarrow j} = \Pi_j \cdot P_{j \rightarrow i}
+\end{equation}
+where $\Pi$ is some steady-state distribution. This is called the detailed balance, or in chemistry this is similar to the idea of microscopic reversibility. 
+
+Metropolis et al. came up with a solution such that only a subset of proposed new steps in the chain are accepted. As an aside, apparently Metropolis just provided the computer but didn't do any of the technical work associated with this development. Arianna Rosenbluth did all of the coding. Story [here](https://www.aps.org/publications/apsnews/202203/history.cfm). 
+
+The probability of moving to a new state is given by:
+\begin{equation}
+\alpha(\theta, \theta') = min\left[1, \frac{g(\theta'|y) \cdot q(\theta', \theta)}{g(\theta|y) \cdot q(\theta, \theta')}\right]
+\end{equation}
+where $\theta$ is the current state and $\theta'$ is the proposed state, and $q(\theta', \theta)$ is the probability of moving from state $\theta$ to $\theta'$. The other term, $g(\theta|y)$, we have seen before in the context of Bayes theorem:
+\begin{equation}
+g(\theta|y) = \frac{f(y|\theta) \cdot g(\theta)}{g(y)}.
+\end{equation}
+If we then look at the ratio:
+\begin{equation}
+\frac{g(\theta'|y)}{g(\theta|y)} = \frac{f(y|\theta') \cdot g(\theta')}{g(y)} \cdot \frac{g(y)}{f(y|\theta) \cdot g(\theta)}
+\end{equation}
+we notice two simplifications that we can make. First, is that if we have a flat prior, then $g(\theta')/g(\theta) = 1$. Second, the $g(y)$'s cancel which leaves us with the ratio:
+\begin{equation}
+\frac{g(\theta'|y)}{g(\theta|y)} = \frac{f(y|\theta')}{f(y|\theta)},
+\end{equation}
+which is just the ratio of likelihoods. Recall that for a Gaussian likelihood, 
+\begin{equation}
+f(y| \theta') \propto \exp^{-(SSE)}
+\end{equation}
+where the summed squared error (SSE) equals: 
+\begin{equation}
+SSE = \left[\frac{1}{2} \sum_{i=1}^{n} \frac{(y_i - M(\theta', x_i))^2}{\sigma^2}\right].
+\end{equation}
+
+We can also make an additional simplification by setting $q(\theta', \theta)/q(\theta, \theta') = 1$ if we set:
+\begin{equation}
+\theta' = \theta + N(0, 1) \cdot scale,
+\end{equation}
+where we adjust $scale$ such that you only accept about 25\% of the proposed steps. 
+
+The steps of the Metropolis-Hastings algorithm are then:
+
+1. Start at an initial value $\theta^0$ and calculate $f(y|\theta^0)$.
+
+2. Do for $n = 1 ... m$
+
++ Draw $\theta'$ from $q(\theta^{n-1}, \theta')$ such as: $\theta' = \theta^{n-1} + N(0, 1) \cdot scale$
+
++ Calculate the probability of acceptance $\alpha(\theta^{n-1}, \theta')$:
+\begin{equation}
+min\left[1, \frac{f(y|\theta')}{f(y|\theta^{n-1})}\right]
+\end{equation}
+
++ Draw $u$ from $\textrm{Unif}(0, 1)$
+
++ **If** $u < \alpha(\theta^{n-1}, \theta')$ **then** 
+ let $\theta^n = \theta'$ \
+ and $\textrm{success} = \textrm{success} + 1$ \
+ and increment count.\
+**else** let $\theta^n = \theta^{n-1}$ \ 
+and increment count.
++ go to next n, where periodically update $scale$
+
+
+Some practical steps that we take to ensure that a Markov Chain is time invariant is that we throw out a certain number of initial steps, which is called the "burn-in" period. In addition, we also start multiple chains at different starting points and we assess how well these chains "mix". Well mixed chains imply that chains that start at different points end up sampling the same state space.    
+
+#### An example
+1. Let's compare the a Monte Carlo integration of the diffusion problem that we have seen earlier with a Markov Chain Monte Carlo approach. So to be clear, determining the mass of drug present in a location requires integrating the concentration profile over the spatial region. 
+
++ Normal integration:
+\begin{equation}
+\textrm{Mass} = z_{slice} \cdot \int_a^b \int_c^d C(x, y) dy dx.
+\end{equation}
+
++ Monte Carlo integration requires sampling the region uniformly:
+\begin{equation}
+\textrm{Mass} = z_{slice} \cdot \frac{\Delta y \cdot \Delta x}{N} \cdot \sum_{i = 1}^N w_i \cdot C(x_i, y_i) ,
+\end{equation}
+where $N$ equals the sum of weights ($\sum_{\textrm{all i}} w_i$) and $\Delta y$ and $\Delta x$ corresponds to the range of integration (i.e, $\Delta y = y_{upper} - y_{lower}$) 
+
++ Markov Chain Monte Carlo integration focuses on regions in x-y space where $C$ is high:
+\begin{equation}
+\textrm{Mass} = z_{slice} \cdot \underbrace{\int \int}_{\textrm{high C region}} C(x, y) dy dx + z_{slice} \cdot \underbrace{\int \int}_{\textrm{zero C region}} \underbrace{C(x, y)}_{= 0} dy dx.
+\end{equation}
+In focusing on the high C region, we use the MCMC samples to estimate the weight of each sampled point
+\begin{equation}
+\textrm{Mass}_{\textrm{high C region}} = z_{slice} \cdot \frac{\Delta y \cdot \Delta x \cdot \textrm{fraction non-zero}}{\textrm{Total Weight}} \cdot \sum_{i = 1}^N \frac{C(x_i, y_i)}{\textrm{Density}(x_i,y_i)} ,
+\end{equation}
+where the effective weight of each sampled point is the reciprocal of the density of points at that location in x-y space ($\textrm{Density}(x_i,y_i)$). 
+
+Using the MCMC samples we can then reconstruct the concentration profile empirically using kernel density estimation and complete the integral.
+
+```{r Preliminaries, echo= FALSE, message = FALSE}
+library(MASS) # need kde2d
+library(fields) # need interp.surface
+```
+
+Let's load some libraries behind the scene and then define the MCMC function for 2-dimensions:
+
+```{r MCMC function}
+mcmc_2D <- function(ftn, xinit, yinit, xa, xb, yc, yd, n, t) {
+  # 2-dimensional Markov Chain Monte Carlo integral of ftn using a chain of length n
+  x_old <- xinit
+  y_old <- yinit
+  f_old <- ftn(c(xinit, yinit), t) 
+  nx <- rnorm(n, 0, 1)
+  ny <- rnorm(n, 0, 1)
+  x <- rep(0,n)
+  y <- rep(0,n) 
+  fv <- rep(0,n) 
+  ps <- rep(0,n) 
+  success <- 0
+  scount <- 0
+  pscale <- 0.5
+  for (i in 1:n){
+    x_new <- x_old + nx[i]*pscale
+    y_new <- y_old + ny[i]*pscale
+    f_new <- ftn(c(x_new, y_new), t)
+    if(scount >= 100){
+      ifelse(success/100 > 0.23, pscale <- pscale*1.1, pscale <- pscale*0.9)
+      success <- 0
+      scount <- 0
+    }else{
+      scount <- scount + 1
+    }
+    ValidXY <- x_new >= xa & x_new <= xb & y_new >= yc & y_new <= yd
+    if(ValidXY){
+      if(runif(1) < min(1, f_new/f_old)){
+        success <- success + 1
+        f_old <- f_new
+        x_old <- x_new
+        y_old <- y_new
+      }
+    }
+    x[i] <- x_old
+    y[i] <- y_old
+    fv[i] <- f_old
+    ps[i] <- pscale
+  }
+  return(data.frame(x = x, y = y, fxy = fv, scale = ps))
+}
+```
+
+Now define the plain Monte Carlo function for 2-dimensions:
+
+```{r MC function}
+mc_2Dintegral <- function(ftn, xa, xb, yc, yd, n, t) {
+  # Monte Carlo integral of ftn using a sample of size n in each dimension
+  ux <- runif(n, xa, xb)
+  uy <- runif(n, yc, yd)
+  xysample <- data.frame(x = ux, y = uy)
+  x <- apply(xysample, 1, function(z) ftn(z, t))
+  # each point is sampled with equal probability so can just take the mean of x
+  return(mean(x)*(xb-xa)*(yd-yc))
+}
+```
+
+Define the concentration with diffusion function with respect to x and y coordinates and with time $t$ as a fixed parameter:
+
+```{r Conc function}
+# Units should be micromole/cm^3
+Conc <- function(ns, time){
+  Mo <- 1 # micromole
+  zslab <- 0.5 # cm
+  D <- 20 # cm^2/sec
+  r2 <- ns[1]^2 + ns[2]^2
+  val <- ((zslab * Mo)/(4* pi * D * time * zslab))*exp(-r2/(4*D*time))
+  return(val)
+}
+```
+
+Set up calculations to compare the mass of drug left within the region calculated using Monte Carlo integration with that calculated using MCMC. We will calculate the mass remaining at different points in time using the same number of samples (1900). Implementation is slightly different. Monte Carlo involves just sampling 1900 points. MCMC involves sampling 2,900 points, then throwing out the first 1000 as a burn-in period. Typically, the chain is also thinned to give a better random sample by retaining only say every 10 points from the rest of the chain. However to compare straight Monte Carlo with MCMC, the chain was not thinned.
+
+```{r calcs}
+# Plot how much "drug" is left within region as a function of time
+TotDrugMC <- rep(0, 200)
+TotDrug <- rep(0, 200)
+Time <- rep(0, 200)
+xa <- -1
+xb <- 1
+yc <- -1
+yd <- 1
+
+# Let's save the first one and then do the rest
+i <- 1
+
+Time[i] <- 10^(-5 + (i-1)*6/199)
+MC <- mcmc_2D(Conc, 0.5, 0.5, xa, xb, yc, yd, 2900, Time[i])
+#plot(tmp$x, tmp$y, ylim = c(yc, yd), xlim = c(xa, xb))
+Thin_MC <- MC[seq(1000,length(MC$fxy), by = 1),]
+
+Initial_MC <- MC
+# Estimate 2-dimensional density of sampled points, this gives the density at defined grid points. 
+DE2d <- kde2d(Thin_MC$x, Thin_MC$y, n = 100, lims = c(xa, xb, yc, yd))
+
+InitialDE2d <- DE2d
+# Interpolate the 2-dimensional density to estimate the density for each sampled point
+Thin_MC$z <- fields::interp.surface(DE2d, data.frame(x = Thin_MC$x, y = Thin_MC$y))
+# As the density is determined at defined grid points, we want to find what fraction of the area has non-zero density values and assume all other regions are zero
+FractionSampled <- length(DE2d$z[DE2d$z >= min(Thin_MC$z)])/length(DE2d$z)
+# Multiply the function evaluated at that point by weight of 1/density of points and divide by sum of weighting
+# Generic MC assumes that weight for each sample is one and then the sum of weights is equal to n
+TotDrug[i] <- sum(Thin_MC$fxy / Thin_MC$z) * FractionSampled * (xb - xa) * (yd - yc)/sum(1/Thin_MC$z)
+TotDrugMC[i] <- mc_2Dintegral(Conc, xa, xb, yc, yd, 1900, Time[i])
+
+for (i in 2:200){
+  Time[i] <- 10^(-5 + (i-1)*6/199)
+  MC <- mcmc_2D(Conc, 0.1, 0.1, xa, xb, yc, yd, 2900, Time[i])
+  #plot(tmp$x, tmp$y, ylim = c(yc, yd), xlim = c(xa, xb))
+  Thin_MC <- MC[seq(1000,length(MC$fxy), by = 1),]
+  # Estimate 2-dimensional density of sampled points
+  DE2d <- kde2d(Thin_MC$x, Thin_MC$y, n = 100, lims = c(xa, xb, yc, yd))
+  # Interpolate the 2-dimensional density to estimate the density for each sampled point
+  Thin_MC$z <- fields::interp.surface(DE2d, data.frame(x = Thin_MC$x, y = Thin_MC$y))
+  # Integrate over sampled area as all other regions are assumed to be zero
+  FractionSampled <- length(DE2d$z[DE2d$z >= min(Thin_MC$z)])/length(DE2d$z)
+  # Multiply the function evaluated at that point by weight of 1/density of points and divide by sum of weighting
+  # Generic MC assumes that weight for each sample is one and then the sum of weights is equal to n
+  TotDrug[i] <- sum(Thin_MC$fxy / Thin_MC$z) * FractionSampled * (xb - xa) * (yd - yc)/sum(1/Thin_MC$z)
+  TotDrugMC[i] <- mc_2Dintegral(Conc, xa, xb, yc, yd, 1900, Time[i])
+}
+```
+
+Let's plot the contour plot for the density predicted from the Markov Chain and the corresponding Markov Chain for the initial time point.
+```{r plot initial MC}
+contour(InitialDE2d)
+lines(Initial_MC$x, Initial_MC$y, col = "blue", type = "b")
+```
+
+In addition, let's look at the acceptance fraction as a function of chain length.
+```{r plot acceptance}
+plot(seq(1,length(Initial_MC$scale)), Initial_MC$scale)
+```
+
+Let's plot the contour plot for the density predicted from the Markov Chain and the corresponding Markov Chain for the **last** time point.
+```{r plot last MC}
+contour(DE2d)
+lines(Thin_MC$x, Thin_MC$y, col = "blue", type = "b")
+```
+
+```{r plots}
+# Each point in space is not sampled equally but sampled according to it's concentration
+plot(log10(Time), TotDrug, ylim = c(0, 2), type ="l", col = "blue")
+lines(log10(Time), TotDrugMC, col = "red")
+```

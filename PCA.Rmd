@@ -1,0 +1,373 @@
+---
+title: "Principal Component Analysis"
+author: "David Klinke"
+date: "`r Sys.Date()`"
+output: bookdown::html_document2
+bibliography: MCMC_references.bib
+csl: nature-no-superscript.csl
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+```
+
+# Principal Component Analysis (from Random Phenomena by B. Ogunnaike)
+
+Principal components analysis (PCA),  first proposed  in 1901 by the British mathematical statistician, Karl Pearson (1857--1936)\footnote{ K. Pearson, (1901) ``On Lines and Planes of Closest Fit to Systems of Points in Space.'' \emph{Phil. Magazine} 2 (6) 559--572. http://stat.smmu.edu.cn/history/pearson1901.pdf.}, is a technique for transforming a data set consisting of a (large) number of possibly correlated variables from the original coordinate system into a new and usually more informative one. This new coordinate system consists of a smaller number of uncorrelated variables, that is orthogonal, called **principal components**. The new set of variables forming the new coordinate system are not only mutually uncorrelated, they also represent a useful redistribution of the information in the data. This is because the new set of variables are ordered such that the greatest amount of variability is now captured along the first axis, the next greatest by the second, and on down to the last few axes with little or no information left to capture. PCA is therefore useful for data simplification (dimensionality reduction) because it allows the data to be described with only the first few truly informative component axes; it is also therefore useful for exposing hidden (latent) structures contained in the original data set.
+
+## Basic Principles of PCA
+### Data Preconditioning
+PCA is "scale-dependent," with larger numerical values naturally accorded more importance, whether deserved or not. To eliminate any such undue influence (especially those arising from differences in the units in which different variables are measured), each data record can "mean-centered" and "scaled" (i.e., normalized) prior to carrying out PCA. But this is problem dependent.
+
+Let the original data set consist of $n$-column vectors **x**$_1^\circ$, **x**$_2^\circ$, $\ldots$ **x**$_n^\circ$, each containing $m$ samples, giving rise to the raw data matrix $\textbf{X}^\circ$. If the mean and standard deviation for each column are $\bar{x}_i, s_i$, then each variable $i=1,2,\ldots,n$, is normalized as follows:
+\begin{equation}
+(\#eq:normalize)
+{\bf x}_i = \frac{{\bf x}_i^\circ - \bar{x}_i}{s_i}
+\end{equation}
+The resulting $m \times n$ pre-treated data matrix, **X**, consisting of columns of data each with zero mean and unit variance.
+
+### Problem Statement
+We begin by contemplating the possibility of an orthogonal decomposition of **X** by expanding in a set of *n-dimensional orthonormal basis vectors*, **p**$_1$, **p**$_2$, **p**$_3$, $\ldots$, **p**$_n$, according to:
+\begin{equation}
+(\#eq:expansion)
+{\bf X} = {\bf t}_1{\bf p}_1^T + {\bf t}_2{\bf p}_2^T + \ldots + {\bf t}_n{\bf p}_n^T
+\end{equation}
+in such a way that
+\begin{equation}
+(\#eq:ortho-p)
+{\bf p}_i^T {\bf p}_j = \left\{
+\begin{array}{ll}
+1 & i=j \\
+0 & i \neq j
+\end{array} \right.
+\end{equation}
+along with
+\begin{equation}
+(\#eq:ortho-t)
+{\bf t}_i^T {\bf t}_j = \left\{
+\begin{array}{ll}
+\lambda_i & i=j \\
+0 & i \neq j
+\end{array} \right.
+\end{equation}
+where **t**$_i$ $(i = 1, 2, \ldots, n)$, like **x**$_i$,  are $m$-dimensional vectors.
+
+In particular, if the $k$-term truncation of the complete $n$-term expansion,
+\begin{equation}
+(\#eq:one)
+{\bf X} = {\bf t}_1{\bf p}_1^T + {\bf t}_2{\bf p}_2^T + \ldots + {\bf t}_k{\bf p}_k^T + {\bf E}
+\end{equation}
+is such that the resulting residual matrix **E**,
+\begin{equation}
+(\#eq:two)
+{\bf E}  = \sum_{i=k+1}^n {\bf t}_i{\bf p}_i^T
+\end{equation}
+contains only random noise, such an expansion would have then provided a $k$-dimensional reduction of the data. It implies that $k$ components are sufficient to capture all the useful variation contained in the data matrix.
+
+The basis vectors, **p**$_1$, **p**$_2$, **p**$_3$, $\ldots$, **p**$_k$, are commonly referred to as "loading vectors;" they provide an alternative coordinate system for viewing the data.  The associated $m$-dimensional "weighting" vectors, **t**$_1$, 
+**t**$_2$, **t**$_3$, $\ldots$, **t**$_k$, are the corresponding "score vectors" of the data matrix; they represent how the data will now appear in the principal component loading space, viewed from the perspective of the induced new coordinate system.
+
+Together, **t**$_i$,  **p**$_i$, and $k$ tell us much about the information contained in the data matrix **X**.  Principal components analysis of the data matrix, **X**, therefore involves the determination of **t**$_i$, **p**$_i$, and $k$.
+
+### Determining the Principal Components and Scores
+Unlike other orthogonal transforms (e.g., Fourier transforms) where the basis functions are known *\`{a}-priori* (sines and cosines for Fourier transforms), the basis  vectors for PCA are not given ahead of time; they must be determined from the data itself.  Thus, with PCA, *both* the basis function set as well as the "coefficients" of the transform are to be computed simultaneously.  The following is one of several approaches for handling this problem; it is based on vector optimization.
+
+We begin from
+\begin{equation}
+(\#eq:three)
+{\bf X} = {\bf t}_1{\bf p}_1^T + {\bf t}_2{\bf p}_2^T + \ldots + {\bf t}_k{\bf p}_k^T + {\bf E}
+\end{equation}
+and before engaging in any optimization, we define the $n \times n$ symmetric matrix
+\begin{equation}
+(\#eq:four)
+{\bf \Phi}_n = {\bf E}^T{\bf E}
+\end{equation}
+and also the $m \times m$ symmetric matrix
+\begin{equation}
+(\#eq:five)
+{\bf \Phi}_m = {\bf E}{\bf E}^T
+\end{equation}
+We now seek the **t**$_i$ and **p**$_i$ vectors that minimize the squared norm of the appropriate matrix ${\bf \Phi}_n$ or ${\bf \Phi}_m$. Which matrix is appropriate depends on the dimensionality of the vector over which we are carrying out the minimization.
+
+First, to determine each $n$-dimensional vector **p**$_i$, since
+\begin{equation}
+(\#eq:six)
+{\bf     \Phi}_n = ({\bf X} - {\bf t}_1{\bf p}_1^T -     {\bf t}_2{\bf p}_2^T - \ldots - {\bf t}_k{\bf p}_k^T)^T({\bf X} - {\bf t}_1{\bf p}_1^T -    {\bf t}_2{\bf p}_2^T - \ldots - {\bf t}_k{\bf p}_k^T)
+\end{equation}
+we may differentiate with respect to the $n$-dimensional vector ${\bf p}_i^T$ obtaining:
+\begin{equation}
+(\#eq:seven)
+\frac{\partial {\bf \Phi}_n }{\partial {\bf p}_i^T} = 2{\bf t}_i^T({\bf X} - {\bf t}_1{\bf p}_1^T -  {\bf t}_2{\bf p}_2^T - \ldots - {\bf t}_k{\bf p}_k^T)
+\end{equation}
+which, upon setting to the $n$-dimensional row vector of zeros, **0**$^T$,  and simplifying, yields
+\begin{equation}
+(\#eq:eight)
+\frac{\partial {\bf \Phi}_n }{\partial {\bf p}_i^T} = {\bf t}_i^T{\bf X} - {\lambda}_i{\bf p}_i^T = {\bf 0}^T
+\end{equation}
+where the simplification arises from the orthogonality requirements on **t**$_i$ (see Eq \@ref(eq:ortho-t)).  The solution is:
+\begin{equation} 
+(\#eq:pvector)
+{\bf p}_i^T =\frac{{\bf t}_i^T{\bf X}}{{\lambda}_i}
+\end{equation}
+Note that this result is true for all values of $i$, and is independent of $k$; in other words, we would obtain  precisely the same result regardless of the chosen truncation.  This property is intrinsic to PCA and common with orthogonal decompositions; it is exploited in various numerical PCA algorithms. The real challenge at the moment is that Eq \@ref(eq:pvector) requires knowledge of **t**$_i$, which we currently do not have.
+
+Next, to determine the $m$-dimensional vectors **t**$_i$, we work with ${\bf   \Phi}_m$,
+\begin{equation}
+(\#eq:nine)
+{\bf     \Phi}_m = ({\bf X} - {\bf t}_1{\bf p}_1^T -     {\bf t}_2{\bf p}_2^T - \ldots - {\bf t}_k{\bf p}_k^T)({\bf X} - {\bf t}_1{\bf p}_1^T -  {\bf t}_2{\bf p}_2^T - \ldots - {\bf t}_k{\bf p}_k^T)^T
+\end{equation}
+and differentiate with respect to the $m$-dimensional vector ${\bf t}_i$ to obtain:
+\begin{equation}
+(\#eq:ten)
+\frac{\partial {\bf \Phi}_m }{\partial {\bf t}_i} = 2({\bf X} - {\bf t}_1{\bf p}_1^T -   {\bf t}_2{\bf p}_2^T - \ldots - {\bf t}_k{\bf p}_k^T) {\bf p}_i
+\end{equation}
+Equating to the $m$-dimensional column vector of zeros, **0**,  and simplifying, the result is:
+\begin{equation}
+(\#eq:eleven)
+\frac{\partial {\bf \Phi}_m }{\partial {\bf t}_i} = {\bf X} {\bf p}_i- {\bf t}_i{\bf p}_i^T{\bf p}_i = {\bf 0}
+\end{equation}
+or,
+\begin{equation}
+(\#eq:tvector)
+{\bf t}_i =\frac{{\bf X}{\bf p}_i}{{\bf p}_i^T{\bf p}_i} =  {\bf X}{\bf p}_i
+\end{equation}
+where the simplification arises again from the orthogonality requirements on **p**$_i$ (see Eq \@ref(eq:ortho-p)).
+
+We now have two self-referential expressions: one for determining **p**$_i$ if **t**$_i$ is known, Eq \@ref(eq:pvector); the other for determining **t**$_i$ if **p**$_i$ is known, Eq \@ref(eq:tvector).  But neither is currently known.  To resolve this conundrum, we start from Eq \@ref(eq:pvector) and substitute Eq \@ref(eq:tvector) for **t**$_i$ to eliminate it and obtain:
+\begin{equation}
+(\#eq:precursor)
+{\bf p}_i^T = \frac{{\bf p}_i^T {\bf X}^T {\bf X}}{\lambda_i}
+\end{equation}
+and if we let **R**= ${\bf X}^T {\bf X}$, then Eq \@ref(eq:precursor) simplifies to
+\begin{eqnarray}
+{\bf p}_i^T {\bf R} & = &  \lambda_i{\bf p}_i^T \nonumber \\
+\mbox{ or } \; {\bf p}_i^T ({\bf R}  - \lambda_i \bf{I}) & = & {\bf 0}
+\end{eqnarray}
+and finally, because both **R** and **I** are symmetric, we have
+\begin{equation}
+(\#eq:eigen)
+(\textbf{R}  - \lambda_i \textbf{I})\textbf{p}_i = \textbf{0}
+\end{equation}
+This equation is immediately recognized as the eigenvalue-eigenvector equation, with the following implications:
+
+> *The loading vectors* **p**$_i$ *are the eigenvectors of the matrix* **R**= ${\bf X}^T {\bf X}$, *with the eigenvalues given by* $\lambda_i =  {\bf t}_i^T {\bf t}_i$ (see eqn \@ref(eq:ortho-t)).
+
+Thus, to carry out PCA:
+
+1. Optionally mean-center and normalize the original data matrix ${\bf X}^\circ$ to obtain the data matrix **X**;
+
+2. Obtain the matrix **R**= ${\bf X}^T {\bf X}$; (if the data is mean-centered and normalized, this matrix is related to the correlation matrix;  if the data is mean-centered only, then **R** is related to the covariance matrix ${\boldsymbol \Sigma}$, which is $\frac{1}{m-1}$**R**);
+
+3. Obtain the eigenvalues and corresponding eigenvectors of **R**; arrange the eigenvalues in descending order such that $\lambda_1 > \lambda_2 > \ldots > \lambda_n$; the corresponding eigenvectors are the loading vectors **p**$_i; i = 1, 2, \ldots, n$;
+
+4. Obtain the corresponding scores from Eq \@ref(eq:tvector) by projecting the data matrix onto the loading vector **p**$_i$.
+
+
+Even though determining the truncation $k$ is somewhat subjective, some methods for choosing this parameter are available, for example, in Malinowski (1991)\footnote{Malinowski, E. R. (1991). \emph{Factor Analysis in Chemistry}, John Wiley \& Sons} and Kritchman and Nadler (2008)\footnote{Kritchman, S. and B. Nadler (2008). ``Determining the number of components in a factor model from limited noisy data.'' \emph{Chemometrics and Intelligent Laboratory Systems} 94(1): 19-32.}. For a chosen truncation, $k < n$ from Eq \@ref(eq:tvector), obtain:
+\begin{equation}
+[{\bf t}_1  {\bf t}_2  \ldots  {\bf t}_k] = {\bf X}[{\bf p}_1  {\bf p}_2  \ldots  {\bf p}_k]
+\end{equation}
+or, simply
+\begin{equation}
+(\#eq:transform)
+{\bf T} = {\bf XP}
+\end{equation}
+as the "principal component" transform of the data matrix **X**.  The $k$ transformed variables **T** are called the principal components scores.
+
+The corresponding ``inverse transform'' is obtained from Eq \@ref(eq:expansion) as:
+\begin{equation}
+(\#eq:inverse)
+\hat{\bf X} = {\bf T}{\bf P}^T
+\end{equation}
+with $\hat{\bf X} = {\bf X}$  only if $k=n$; otherwise $\hat{\bf X}$ is a "cleaned up," lower-rank version of **X**.  The difference,
+\begin{equation}
+(\#eq:residual)
+{\bf E} = {\bf X} - \hat{\bf X}
+\end{equation}
+is the residual matrix; it represents the residual information contained in the portion of the original data associated with the $(n-k)$ loading vectors that were excluded from the transformation.
+
+### Main Characteristics of PCA
+#### Some important results and implications
+The determination of **P** is an eigenvalue-eigenvector problem; the numerical computation is therefore typically carried out via singular value decomposition. The following expressions hold for **P**:
+\begin{eqnarray}
+{\bf P}^T{\bf RP} & = & {\bf \Lambda} \\
+\mbox{  or  } \; \; {\bf R} & = & {\bf P}{\bf \Lambda}{\bf P}^T
+\end{eqnarray}
+with the following implications:
+
+1. Tr(**R**), the trace of the matrix **R**, the sum of the diagonal elements of the matrix **R**, is equal to Tr(${\bf \Lambda}$), the sum of the eigenvalues; i.e.,
+\begin{equation}
+(\#eq:TrR)
+Tr({\bf R}) = Tr({\bf \Lambda}) = \sum_{i=1}^n \lambda_i
+\end{equation}
+2.  Tr(**R**) is a measure of the total variance in the data block **X**.  From Eq \@ref(eq:TrR), this implies that the sum of the eigenvalues is also a measure of the total variance in the data block.  The fractional contribution of the $j^{th}$ principal component to the overall variance in the data is therefore given by $\lambda_j/(\sum_{i=1}^n \lambda_i)$.
+3. Similarly,
+\begin{equation}
+(\#eq:twelve)
+|{\bf R}| = \prod_{i=1}^n \lambda_i
+\end{equation}
+If, therefore, the matrix ${\bf X}^T {\bf X} = {\bf R}$ is of rank $r < n$, then only $r$ eigenvalues are non-zero; the rest are zero, and the determinant will be zero. The matrix will therefore be singular (and hence non-invertible).
+
+4. When an eigenvalue is not precisely zero, just small, the cumulative contribution of its corresponding principal component to the overall variation in the data will likewise be small. Such component may then be ignored.  Thus, by defining the cumulative contribution of the $j^{th}$ principal component as:
+\begin{equation}
+(\#eq:thirteen)
+\Gamma_j = \frac{\sum_{i=1}^j \lambda_i}{\sum_{i=1}^n \lambda_i}
+\end{equation}
+one may choose $k$ such that $\Gamma_{k+1}$ "does not add much" beyond $\Gamma_k$.  Typically a plot of $\lambda_j$ versus $j$, known as a Scree plot, shows a "knee" at or after the point $j=k$ (see below). Alternatively, a data-driven approach can be used to establish a baseline eigenvalues for which the result can not be distinguished from random noise. This can be done by creating a synthetic dataset where the relationship among the measurements of the individual variables can be scrambled using a resampling approach. Ultimately, this distributes the variance equally among the different principal components and the threshold is roughly $\frac{1}{n}$, where $n$ is the number of dimensions.
+
+### Properties of PCA Transformation
+As a technique for transforming multivariate data from one set of coordinates into a new, more informative set, here are some of the key properties of PCA:
+
+1. Each loading vector **p**$_i^T$ is seen from Eq \@ref(eq:pvector) to be a linear combination of the columns of the data matrix.
+
+2. Each score, ${\bf t}_i$, is seen from Eq \@ref(eq:tvector)  as the projection of the data onto the basis vector **p**$_i$.  By choosing $k < n$, the data matrix **X** is projected down to a lower dimensional space using **p**$_i^T$ as the basis for the projection.
+
+3. For all intents and purposes, PCA "replaces" the original $m \times n$ data matrix **X** with a better conditioned $m \times k$  matrix **T** in a different set of coordinates in a lower dimensional sub-space of the original data space.  The data may be ``recovered'' in terms of the original coordinates after eliminating the extraneous components from Eq \@ref(eq:inverse), where $\hat{\bf X}$ is now an $m \times k$  matrix.
+
+4. Any collinearity problem in **X** is solved by this transformation because the resulting matrix **T** is made up of orthogonal vectors so that ${\bf T}^T{\bf T}$ not only exists, it is diagonal.
+
+The principles and results of PCA are now illustrated with the following example.
+
+## Illustrative example
+Even to veterans of multivariate data analysis, the intrinsic linear combinations of variables can make PCA and its results somewhat challenging to interpret. This is in addition to the usual plotting and visualization challenge arising from the inherent multidimensional character of such data analysis. The problem discussed here has been chosen therefore specifically to demonstrate what principal components, scores and loadings mean in real applications, but in a manner somewhat more transparent to interpret.
+
+### Problem Statement and Data
+The problem involves the analysis of two Markov Chains containing over 10000 samples obtained from 6 variables - Low $So$, High $So$, $k_f$, $k_r$, $k_{cat}$, and the Fraction Accepted - to form a $10000 \times 6$ raw data matrix. While the Fraction Accepted was not one of the parameters fit, it is also associated with each step in the chain and it serves to illustrate aspects of the approach. The Markov Chains were generated by analyzing enzyme kinetics data that we discussed in a previous class. The first Markov Chain was generated using an algorithm that adapted the proposed steps based on the cumulative accepted steps in the chain. Traces of the parameters are shown below.
+
+```{r Read file}
+AMCMC <- read.csv("Thin-AMCMC.csv", header = TRUE)
+# let's get rid of the steps column and keep only 10,000 steps
+AMCMC <- AMCMC[c(1:10000),-1]
+
+par(mfrow = c(1, 2), pty = "s")
+MCstep <- seq(1, length(AMCMC[,1]))
+plabel <- c("Low So", "High So", "kf", "kr", "kcat")
+for (i in 1:5){
+  ymin = -8
+  ymax = 8
+  
+  plot(MCstep, AMCMC[,i], ylim = c(ymin, ymax), type = "l", xlab = "MCMC step", ylab = "log10 theta", main = plabel[i], col = "red")
+}
+# Include acceptance fraction for a contrast
+plot(MCstep, AMCMC[,6], ylim = c(0, 1), type = "l", xlab = "MCMC step", ylab = "Acceptance Fraction", main = "Acceptance Fraction", col = "red")
+```
+
+The primary objective is to analyze the data to see if the dimensionality could be reduced from 6 to a more manageable number; and to see if there are any patterns to be extracted from the data. Before going on, the reader is encouraged to take some time and examine the data plots for any visual clues regarding the characteristics of the complete data set.
+
+
+### PCA and Results
+The computations involved in PCA are routinely done with computer software; as illustrated by the following R scripts. The first step is to normalize the data. This can be done by just subtracting out the mean values of the corresponding variables (called sweeping) or converting the variables to standard normal values by sweeping out the mean and then dividing by the standard deviations. The resulting data set then has unit variance. As we want to explore how the variation in each variable changes with each step in the chain, we will just subtract out the means. 
+
+```{r mean center}
+mean1 <- apply(AMCMC, MARGIN = 2, mean)
+sd1 <- apply(AMCMC, MARGIN = 2, sd)
+cAMCMC <- sweep(AMCMC, MARGIN = 2, mean1)
+```
+
+As the principal component analysis is based on an Eigenvalue/Eigenvector decomposition of the variance/covariance matrix, we can examine this matrix for clues as to the anticipated results. 
+
+```{r examine variance/covariance matrix}
+covfs1 <- cov(cAMCMC)
+
+show(covfs1)
+```
++ Discuss structure of covariance matrix
+
+Now we can perform principal component analysis using all of the data columns (all 6 of them), which will provide the same number of principal components to be computed. As we have already scaled our data, we select the option for ``scale'' as FALSE. We also selected retx as FALSE as we will be calculating the principal component projections for each point in the chain by ourselves. The principal components (the loading vectors) are also printed out for examination. 
+
+```{r calculate PCs}
+#Normalize PCA observations
+# calculate Principal component analysis on all data and apply to others
+mc1PCA <- prcomp(cAMCMC, retx = FALSE, scale. = FALSE)
+
+load.Matrix <- data.frame(mc1PCA$rotation)
+show(load.Matrix)
+```
+
+These results are best appreciated graphically. First, a \emph{Scree plot} is a straightforward plot of the eigenvalues in descending order normalized to their sum. Their sum represents the total variability in the data set. The primary characteristic of this plot is that it shows graphically how many eigenvalues (and hence principal components) are necessary to capture most of the variability in the data. This particular plot shows that after the first two components, not much else is important. The actual numbers in the eigenanalysis table show that almost 95\% of the variability in the data is captured by the first principal component; the second principal component contributes less than 5\% with the remainder distributed among the other four principal components.  This is reflected in the very sharp ``knee'' at the point $k+1 = 2$ in the Scree plot. The implication therefore is  that the information contained in the 6 variables can be represented quite well using two principal components, PC1 and PC2.
+```{r Scree plot}
+#Scree plot
+EigenVals <- mc1PCA$sdev^2
+EigenVals
+TotVar <- sum(EigenVals)
+TotVar
+PrPC <- c(1:6)
+for ( i in 1:6 )
+{
+  PrPC[i] <- EigenVals[i]/TotVar
+}
+
+mp <- barplot(PrPC[c(1:6)]*100, names.arg = c(1:6), ylim = c(0,100), ylab = "Variance (%)", xlab = "Principal Component")
+```
+
+If we now focus on the first four principal components and their associated loadings and scores, the first order of business is to plot these to see what insight they can offer into the data.  The individual loading and score plots are particularly revealing for this particular problem.  The panels in the figure below shows such a plot for the first four principal component.  It is important to remember that the scores indicate what the new data will look like in the transformed coordinates; in this case, the top panel indicates that in the direction of the first principal component, the data set is essentially linear with a positive slope.  The loading plot indicates in what manner this component is represented in (or contributes to) each of the original 6 variables.
+
+```{r PC loadings}
+par(mfrow = c(2, 2), mar = c(3, 0.1, 1, 0.1), pty = "s")
+plabel <- c("S_lo", "S_hi", "k_f", "k_r", "k_cat", "Accept")
+for (i in 1:4){
+  barplot(mc1PCA$rotation[,i], ylim = c(-1,1), ylab = "Loading", main = paste("PC", i, sep = ""), names.arg = plabel, col = "red")
+}
+```
+
+We can also look at the loadings for a variable across the first two principal components.
+```{r PC loadings 2}
+plabel <- c("S_lo", "S_hi", "k_f", "k_r", "k_cat", "Accept")
+
+plot(mc1PCA$rotation[,1], mc1PCA$rotation[,2], xlim = c(-1, 1), ylim = c(-1,1), ylab = "PC 2 Loading", xlab = "PC 1 loading", ty = "p", col = "red")
+text(mc1PCA$rotation[,1], mc1PCA$rotation[,2] + 0.1, labels = plabel)
+```
+
+* What do you observe about these loading factors?
+
+Now let's look at the plots of the principal component scores for each step in the chain.
+```{r PC projections}
+# n_steps x n_PC          =   n_steps x n_variables      *  n_variables x n_PC
+PC.data <- as.matrix(cAMCMC) %*% mc1PCA$rotation
+
+for (i in 1:3){
+  plot(PC.data[,i], ylim = c(-10,10), ylab = paste("PC", i, sep = ""))
+}
+
+```
+
+Finally, the PC score and loading plots are standard fare in PCA.  They are designed to show any relationship that might exist  between the scores in the new set of coordinates, and also how the loading vectors of the principal components are related.  
+
+Taken together, these plots indicate that the data consists of only two primary modes: PC1 is linear positive correlation between $k_f$ and $k_r$ and the more dominant of the two; the other, PC2, is a linear inverse correlation between $k_f$ and the combination of $k_r$ and $k_cat$. Some variation in $k_cat$ is independent of the other variables. For the acceptance fraction, we find that changes in this variable are unrelated to the other parameters. There is essentially no variation in the parameters associated with the substrate concentrations  
+
+It is of course rare to find problems for which the principal components are as pure as in this example. Keep in mind, however, that this example is a deliberate attempt to give the reader an opportunity to see first a transparent case where the PCA results can be easily understood.  Once grasped, such understanding is then easier to translate to less transparent cases. 
+
+Additional information especially about implementing PCA in practice may be found in Esbensen (2002)\footnote{K. H. Esbensen, (2002). \emph{Multivariate Data Analysis--In practice} (5th Edition), Camo Process AS.}, Naes \emph{et al.}, (2002)\footnote{Naes, T., T. Isaksson, T. Fearn and T. Davies (2002). \emph{A user-friendly guide to Multivariate Calibration and Classification}. Chichester, UK, NIR Publications.}, Brereton (2003)\footnote{Brereton, R. G. (2003). \emph{Chemometrics: Data Analysis for the Laboratory and Chemical Plant}, Wiley \& Sons.}, and in Massart et al., (1988)\footnote{Massart, D. L., B. G. M. Vandeginste, S. N. Deming, Y. Michotte and L. Kaufman (1988). \emph{Chemometrics: A Textbook}. Amsterdam, Netherlands, Elsevier.}.
+
+```{r read in other MC}
+MCMC <- read.csv("MCMC-Chain1.csv", header = TRUE)
+# let's get rid of the steps column and keep 10,000 steps
+MCMC <- MCMC[c(1:10000),-1]
+
+MCstep <- seq(1, length(MCMC[,1]))
+plabel <- c("Low So", "High So", "kf", "kr", "kcat")
+for (i in 1:5){
+  ymin = -8
+  ymax = 8
+  
+  plot(MCstep, MCMC[,i], ylim = c(ymin, ymax), type = "l", xlab = "MCMC step", ylab = "log10 theta", main = plabel[i], col = "red")
+}
+# Include acceptance fraction for a contrast
+plot(MCstep, MCMC[,6], ylim = c(0, 1), type = "l", xlab = "MCMC step", ylab = "Acceptance Fraction", main = "Acceptance Fraction", col = "red")
+```
+
+```{r apply PCs to other MC}
+# Let's sweep out variable means based on AMCMC run
+mean2 <- apply(MCMC, MARGIN = 2, mean)
+cMCMC <- sweep(MCMC, MARGIN = 2, mean2)
+
+# n_steps x n_PC          =   n_steps x n_variables      *  n_variables x n_PC
+PC2.data <- as.matrix(cMCMC) %*% mc1PCA$rotation
+
+for (i in 1:5){
+  plot(PC2.data[,i], ylim = c(-10,10), ylab = paste("PC", i, sep = ""))
+}
+```
+
+# References

@@ -1,0 +1,312 @@
+---
+title: "Markov Chain Monte Carlo Regression of ODE Model"
+author: "David Klinke"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Markov Chain Monte Carlo applied to parameter estimation of dynamic model
+
+
+```{r Preliminaries, echo= FALSE, message = FALSE}
+library(sundialr)
+library(Bolstad2)
+
+ODE_MM <- function(t, y, p){
+  ## initialize the derivative vector
+  ydot <- vector(mode = "numeric", length = length(y))
+  
+  ## unpack parameter vector
+  ##========================================================================
+  kf <- p[1]   # forward rate constant in mM^-1
+  kr <- p[2]   # reverse rate constant in sec^-1
+  kc <- p[3]   # enzyme catalytic rate constant in sec^-1
+  Eo <- p[4]   # Enzyme concentration in mM
+  
+  ## Relabel species names
+  Cl <- y[1] # 1 low Complex
+  Sl <- y[2] # 2 low Substrate
+  Ch <- y[3] # 3 High Complex
+  Sh <- y[4] # 4 High Substrate
+
+  # Complex - low
+  ydot[1] = kf*(Eo - Cl)*Sl - (kr + kc) * Cl
+  # Substrate - low        
+  ydot[2] = -kf*(Eo - Cl)*Sl + kr * Cl
+  # Complex - high
+  ydot[3] = kf*(Eo - Ch)*Sh - (kr + kc) * Ch
+  # Substrate - high        
+  ydot[4] = -kf*(Eo - Ch)*Sh + kr * Ch
+
+  return(ydot)
+}
+```
+
+```{r assign parameter and IC values}
+#Define data points
+loadParams <- function(theta){
+  # Distribute parameters associated with Initial conditions:  
+  y0 <- rep(0, 4)
+  y0[1] <- 0       # Low Complex (mM)
+  y0[2] <- 10^theta[1] # Low Substrate (mM)
+  y0[3] <- 0       # High Complex (mM)
+  y0[4] <- 10^theta[2] # High Substrate (mM)
+
+  # Distribute parameters associated with kinetic rate constants:
+  params <- rep(0, 4)
+  params[1] <- 10^theta[3]  # kf
+  params[2] <- 10^theta[4]  # kr
+  params[3] <- 10^theta[5]  # kcat
+  params[4] <- 10^(-5)      # Total Enzyme Eo mM
+
+  res <- data.frame(Y0 = y0, Params = params)
+
+  return(res)
+}
+```
+
+```{r enter data}
+#Define data points
+
+times <- c(0, 6624, 13606, 23606, 33606, 43606, 50000)
+y1r1 <- c(1.08E-03, 4.39E-04, 6.21E-04, 2.22E-04, 1.81E-04, 0.00E+00, 0.00E+00)
+y1r2 <- c(8.73E-04, 8.00E-04, 3.32E-04, 4.34E-04, 1.57E-04, 9.61E-05, 7.35E-05)
+y1r3 <- c(9.19E-04, 8.14E-04, 3.87E-04, 4.60E-04, 2.07E-04, 2.01E-05, 1.70E-04)
+y2r1 <- c(3.00E-03, 2.44E-03, 2.85E-03, 1.94E-03, 1.33E-03, 2.97E-04, 8.83E-05)
+y2r2 <- c(2.83E-03, 2.84E-03, 2.08E-03, 1.85E-03, 1.61E-03, 7.91E-04, 9.55E-04)
+y2r3 <- c(2.95E-03, 2.25E-03, 2.19E-03, 1.29E-03, 5.22E-04, 4.31E-04, 1.93E-04)
+data1 <- data.frame(times = times, y1r1 = y1r1, y1r2 = y1r2, y1r3 = y1r3, 
+                    y2r1 = y2r1, y2r2 = y2r2, y2r3 = y2r3)
+```
+
+Let's now set up the likelihood evaluation:
+```{r define likelihood function}
+LLH <- function(theta, data){
+    stepi <- loadParams(theta)
+    #reltol <- 1e-04
+    #abstol <- rep(1e-8, 4)
+
+    ## Solving the ODEs using cvode function using R
+    #Yhat <- cvode(data$times, stepi$Y0, ODE_MM, stepi$Params, reltol, abstol)
+    Yhat <- cvode(data$times, stepi$Y0, ODE_MM, stepi$Params)
+    SSE1 <- sum((Yhat[,3] - data$y1r1)^2)
+    SSE2 <- sum((Yhat[,3] - data$y1r2)^2)
+    SSE3 <- sum((Yhat[,3] - data$y1r3)^2)
+    SSE4 <- sum((Yhat[,5] - data$y2r1)^2)
+    SSE5 <- sum((Yhat[,5] - data$y2r2)^2)
+    SSE6 <- sum((Yhat[,5] - data$y2r3)^2)
+    SSE <- SSE1 + SSE2 + SSE3 + SSE4 + SSE5 + SSE6
+    ni <- 6*length(data$y1r1)
+    sigma <- 1
+    like <- (1/(2 * pi * sigma^2)^ni) * exp(- SSE/(2*sigma^2))
+    return(like)
+}
+```
+
+Let's load some libraries behind the scene. In particular, we will use the Bolstad2 library for the Gelman-Rubin statistic, although there are other packages that provide this function. Next we will define the MCMC function:
+
+```{r MCMC function}
+#Define Metropolis-Hastings algorithm
+
+MHmcmc <- function(sigma, likelihood, data, steps = 1000, target = 0.2, randomSeed = NULL, startValue = NULL) 
+{
+  if (steps < 100) {
+    warning("Function should take at least 100 steps")
+  }
+  #determine number of parameter dimensions
+  np <- length(sigma)
+  if (any(sigma <= 0)) 
+    stop("All standard deviations must be strictly non-zero and positive")
+  # save the parameter values in the Markov Chain, the scale factor, 
+  # and the likelihood evaluation
+  targetSample <- matrix(rep(0, (np+2)*steps), nrow = steps, byrow = TRUE)
+  
+  if (!is.null(randomSeed)) 
+    set.seed(randomSeed)
+  z <- rnorm(steps, 0, sigma[1])
+  for (n in 2:np){
+    z <- cbind(z, rnorm(steps, 0, sigma[n]))
+  }
+  u <- runif(steps)
+  if (is.null(startValue)) 
+    startValue <- z[1,]
+  
+  i1 <- 1
+  nstep = 1
+  accept = 1
+  af <- accept/nstep
+  
+  g <- rep(0, steps)
+  proposal <- matrix(rep(0, np*steps), nrow = steps, byrow = TRUE)
+  alpha <- rep(0, steps)
+
+  g[1] <- likelihood(startValue, data)
+
+  targetSample[1,] <- c(startValue, af, g[1])
+  
+  for (n in 2:steps) {
+    proposal[n,] <- targetSample[i1,c(1:np)] + z[n,]
+    g[n] <- likelihood(proposal[n,], data)
+    k3 <- g[n]
+    k4 <- g[i1]
+    alpha[n] <- ifelse(k3/k4 > 1, 1, k3/k4)
+    if (u[n] >= alpha[n]) {
+      targetSample[n,] <- targetSample[i1,]
+    }
+    else {
+      targetSample[n,] <- c(proposal[n,], af, g[n])
+      i1 <- n
+      accept <- accept + 1
+    }
+    if (nstep >= 200){
+      af <- accept/nstep
+      if (af > target){
+        z <- z * 1.1
+      } else if (af < target){
+        z <- z * 0.9
+      }
+      nstep = 0
+      accept = 0
+    } else {
+      nstep = nstep + 1
+    }
+  }
+  return(targetSample)
+}
+```
+
+Define the data points, which comprise a time point in hours and a measurement, which is the dependent variable:
+
+```{r calcs}
+#Define data points
+plot(data1$times, data1$y1r1, ylim = c(0.5, 6), ty = "p", col = "red")
+points(data1$times, data1$y1r2, col = "red")
+points(data1$times, data1$y1r3, col = "red")
+points(data1$times, data1$y2r1, col = "blue")
+points(data1$times, data1$y2r2, col = "blue")
+points(data1$times, data1$y2r3, col = "blue")
+```
+
+
+Here we are going to use different proposed step sizes for the two different parameters.
+
+```{r do MCMC}
+#Set up standard deviation of proposal distribution
+start <- c(-2.2, -1.6, 1.8, -0.8, -1.8)
+Sig <- rep(0.1, 5)
+
+jnk <- LLH(start, data1)
+
+TNC1 <- MHmcmc(Sig, LLH, data1, steps = 10000, target = 0.2, startValue = start)
+TNC2 <- MHmcmc(Sig, LLH, data1, steps = 10000, target = 0.2, startValue = c(runif(1) - 4,runif(1) - 3, runif(1)+1, runif(1)-1))
+TNC3 <- MHmcmc(Sig, LLH, data1, steps = 10000, target = 0.2, startValue = c(runif(1) - 4,runif(1) - 3, runif(1)+1, runif(1)-1))
+TNC4 <- MHmcmc(Sig, LLH, data1, steps = 10000, target = 0.2, startValue = c(runif(1) - 4,runif(1) - 3, runif(1)+1, runif(1)-1))
+```
+
+As Bayesian data analysis is not widely used, there are a number of aspects that you need to show when reporting the results of a Markov Chain Monte Carlo simulation (from Kruschke - Doing Bayesian Data Analysis. 
+
+1. **Motivate the use of a Bayesian analysis:** Many audiences are unfamiliar with Bayesian methods so some motivation as to why you are using this approach may be helpful. 
+
+2. **Clearly describe the data structure, the model, and the model’s parameters:** Ultimately you want to report the meaningful parameter values, but you can’t do that until you explain the model, and you can’t do that until you explain the data being modeled. Therefore, recapitulate the data structure, reminding your reader of the predicted and predictor variables. Then describe the model, emphasizing the meaning of the parameters. This task of describing the model can be arduous for complex hierarchical models, but it is necessary and crucial if your analysis is to mean anything to your audience.
+
+3. **Clearly describe and justify the prior:** It is important to convince your audience that your prior is appropriate and does not predetermine the outcome. The prior should be amenable to a skeptical audience. 
+
+4. **Report the MCMC details**, especially evidence that the chains were converged and of sufficient length. Typically one presents a trace of the different chains to show that they are randomly traversing parameter space. In addition, one should show a metric of convergence as a function of chain length. Once the chain has converged, the subsequent samples represent random samples from the posterior. Those samples should be used for inference. 
+
+5. **Interpret the posterior:** Many models have dozens or even hundreds of parameters, and therefore it is impossible to summarize all of them. The choice of which parameters or contrasts to report is driven by domain-specific theory and by the results themselves. You want to report the parameters and contrasts that are theoretically meaningful. You can report the posterior central tendency of a parameter and its HDI in text alone; histograms of posteriors are useful for the analyst to understand the posterior and for explanation, but may be unnecessary in a concise report. Bivariate scatter plots can be helpful to determine whether certain parameters are correlated and whether they exhibit non-Gaussian distribution. 
+
+Here let's plot the trace of the acceptance fraction of the first chain that was used to regress condition 1.
+```{r scale results}
+plot(seq(1,nrow(TNC1)), TNC1[,3], ty = "l", ylab = "Acceptance fraction", xlab = "MCMC step", col = "red")
+```
+
+Now let's plot the trace of the four chains that were used to regress condition 1.
+```{r results}
+par(mfrow = c(2, 2), pty = "s")
+plot(TNC1[,1], TNC1[,2], xlim = c(-0.5, 0.5), ylim = c(-1.0,3.0), ty = "l", col = "red", main = "Chain 1")
+plot(TNC2[,1], TNC2[,2], xlim = c(-0.5, 0.5), ylim = c(-1.0,3.0), ty = "l", col = "blue", main = "Chain 2")
+plot(TNC3[,1], TNC3[,2], xlim = c(-0.5, 0.5), ylim = c(-1.0,3.0), ty = "l", col = "green", main = "Chain 3")
+plot(TNC4[,1], TNC4[,2], xlim = c(-0.5, 0.5), ylim = c(-1.0,3.0), ty = "l", col = "orange", main = "Chain 4")
+#lines(TNC2[,1], TNC2[,2], col = "blue")
+#lines(TNC3[,1], TNC3[,2], col = "green")
+#lines(TNC4[,1], TNC4[,2], col = "orange")
+```
+
+Let's calculate the Gelman-Rubin statistic on the parameters regressed to first condition.
+
+```{r Gelman-Rubin stat, message = FALSE}
+# Use Gelman-Rubin potential improvement statistic
+# Ratio of variance between chains / variance within chain
+#
+
+slope <- cbind(TNC1[,1], TNC2[,1], TNC3[,1], TNC4[,1])
+int <- cbind(TNC1[,2], TNC2[,2], TNC3[,2], TNC4[,2])
+Xval <- seq(100, nrow(TNC1), by = 100)
+mGR <- rep(0, length(Xval))
+bGR <- rep(0, length(Xval))
+for (i in 1:length(Xval)){
+  tmp <- GelmanRubin(slope[1:Xval[i],])
+  mGR[i] <- tmp$R
+  tmp <- GelmanRubin(int[1:Xval[i],])
+  bGR[i] <- tmp$R
+}
+```
+
+and plot the resulting metric.
+
+```{r plot Gelman-Rubin stat, message = FALSE}
+# Use Gelman-Rubin potential improvement statistic
+# Ratio of variance between chains / variance within chain
+#
+plot(Xval, mGR, ty = "l", xlim = c(0,4000), ylab = "Gelman-Rubin PSRF", xlab = "MCMC step", col = "blue")
+lines(Xval, bGR, col = "red")
+```
+
+Plot traces
+```{r traces}
+MCstep <- seq(1, length(TNC1[,1]))
+ymin <- min(c(TNC1[,1], TNC2[,1], TNC3[, 1], TNC4[,1]))
+ymax <- max(c(TNC1[,1], TNC2[,1], TNC3[, 1], TNC4[,1]))
+
+plot(MCstep, TNC1[,1], ylim = c(ymin, ymax), type = "l", xlab = "MCMC step", col = "red")
+lines(MCstep, TNC2[,1], col = "blue")
+lines(MCstep, TNC3[,1], col = "green")
+lines(MCstep, TNC4[,1], col = "orange")
+```
+
+We can also plot the histograms of the parameter values determined from the converged segments of the chains.
+
+```{r histograms}
+h1 <- density(c(TNC1[2000:4000,1], TNC2[2000:4000,1], TNC3[2000:4000,1], TNC4[2000:4000,1]))
+ymax <- max(c(h1$y)) * 1.05
+plot(h1$x, h1$y, type = "l", col = "black", xlim = range(-0.5,0.5), 
+     ylim = c(0, ymax), main = "Posterior Slope", 
+     xlab = "slope", ylab = "Density")
+
+h1 <- density(c(TNC1[2000:4000,2], TNC2[2000:4000,2], TNC3[2000:4000,2], TNC4[2000:4000,2]))
+ymax <- max(c(h1$y)) * 1.05
+plot(h1$x, h1$y, type = "l", col = "black", xlim = range(-2,3), 
+     ylim = c(0, ymax), main = "Posterior Intercept", 
+     xlab = "intercept", ylab = "Density")
+```
+
+Are these two parameters correlated? A scatter biplot may help to visualize. 
+```{r 2D scatter plot}
+m <- c(TNC1[2000:4000,1], TNC2[2000:4000,1], TNC3[2000:4000,1], TNC4[2000:4000,1])
+b <- c(TNC1[2000:4000,2], TNC2[2000:4000,2], TNC3[2000:4000,2], TNC4[2000:4000,2])
+
+colori <- colorRampPalette(c("blue", "red", "yellow"))
+cols <- densCols(m, b, nbin = 128, colramp = colori)
+plot(m, b, type = "p", xlab = "slope", ylab = "intercept", col = cols) 
+
+```
+
+
+
++ Do you still need the same number of steps to converge the posterior in the second example?
+
++ Are the parameters different between the two conditions?

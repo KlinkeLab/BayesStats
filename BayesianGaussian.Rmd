@@ -1,0 +1,232 @@
+---
+title: "BMEG 601: Bayes Gaussian"
+author: "David Klinke"
+date: "2022-10-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list = ls())
+```
+
+## Bayesian Inference for a Gaussian Mean
+
+Last time, we estimated the value of a single parameter describing the probability of success using a single data point that summarized the results of a cohort and a binomial model. Today we are going to take a series of steps to estimate the value of two parameters that are associated with a Gaussian model for random variables. We are also going to perform a corollary of the ***first goal*** of a statistical analysis, which is to make a decision based on the confidence associated with estimated parameter.
+
+The key mathematical difference between our discussion of estimating a binomial parameter and estimating the parameters associated with a Gaussian model is the mathematical relation for the likelihood. For a Gaussian model, that is the observations are distributed **normally**, the probability of observing an event $y$ is described by:
+\begin{equation}
+P(y|\mu, \sigma) = \frac{1}{\sqrt{2\pi} \sigma} \exp^{- \frac{1}{2 \sigma^2} (y - \mu)^2},
+\end{equation}
+where $\mu$ and $\sigma^2$ are the expected mean and variance of the observations, respectively. 
+
+Usually we have multiple observations of this random variable, such as $y_1, ..., y_n$ instead of a single observation. A common assumption of these observations is that they are independent and identically distributed samples of a random variable, which is abbreviated ***i.i.d.***. This statement has two implications. First, the observations are independent means that the probability of one observation doesn't depend on another observation. The probability of observing the set of observations is then the product of observing each individual event:
+\begin{equation}
+P(y_1, ... , y_n|\mu, \sigma) = P(y_1|\mu, \sigma) \times ... \times P(y_n|\mu, \sigma). 
+\end{equation}
+Second, the observations are identically distributed means that we can use the same model, which here is a Gaussian model, to describe all the observations. The probability of observing the collective observations is then:
+\begin{equation}
+P(y_1, ... , y_n|\mu, \sigma) = \left(\frac{1}{\sqrt{2\pi} \sigma}\right)^n \exp^{- \frac{1}{2 \sigma^2} \sum_{i = 1}^n (y_i - \mu)^2}. 
+\end{equation}
+
+Instead of summing up over all the observations each time we choose a new set of parameter values, we can simplify this expression to include just summary information about the sample. The sample information is the sample variance of the $y_i$'s, $s^2$ and the sample mean, $\bar{y}$. This simplified expression is then: 
+\begin{equation}
+P(y_1, ... , y_n|\mu, \sigma) = \left(\frac{1}{\sqrt{2\pi} \sigma}\right)^n \exp^{- \frac{1}{2 \sigma^2} \left[(n - 1)s^2 + n(\bar{y} - \mu)^2 \right]}. \label{eqn1}
+\end{equation}
+where 
+\begin{equation}
+s^2 = \frac{1}{n - 1} \sum_{i=1}^{n} (y_i - \bar{y})^2 \textrm{  and  } \bar{y} = \frac{1}{n} \sum_{i = 1}^{n} y_i
+\end{equation}
+
+### Estimating the mean when the measurement uncertainty is known
+
+Let's consider the following problem: You are the engineer responsible for quality standards at a cheese factory. You want the probability that a randomly chosen block of cheese labeled ``1 kg" is actually less than 1 kilogram (1000 grams) to be 1\% or less. The weight (in grams) of blocks of cheese produced by the machine is normally distributed with a variance of $3^2$. The weights (in grams) of a sample of 20 blocks of cheese are:
+```{r data}
+sample1 <- c(994 , 997 , 999 , 1003 , 994 , 998 , 1001 , 998 , 996 , 1002,
+1004 , 995 , 994 , 995 , 998, 1001 , 995 , 1006 , 997 , 998)
+show(sample1)
+```
+You decide to use a discrete prior distribution for $\mu$ with the probabilities for each value equal to 0.05.
+```{r prior}
+Value <- seq(991, 1010, by = 1)
+Prior <- rep(0.05, length(Value))
+Init <- data.frame(Parameter = Value, Prior = Prior)
+```
+
+#### (a) Calculate the posterior probability distribution
+Because we are assuming that we know the variance of the blocks of cheese produced by the machine, we have to estimate only the posterior distribution of the average block size, $\mu$. This also implies that all of the terms that don't include $\mu$ are a constant and can come out of the ***Evidence*** integral. These terms then cancel with the ones in the ***likelihood***, which simplifies to:
+\begin{equation}
+P(y_1, ... , y_n|\mu) \propto \exp^{- \frac{n(\bar{y} - \mu)^2}{2 \sigma^2}}
+\end{equation}
+```{r likelihood}
+likelihood <- function(mu, ybar, sigma, n){
+  res <- exp(- (n*(ybar - mu)^2)/(2*sigma^2))
+  return(res)
+}
+yb <- mean(sample1)
+n <- length(sample1)
+likelihood.prior <- apply(Init, 1, function(x) likelihood(x['Parameter'], yb, 3, n) * x['Prior'])
+show(likelihood.prior)
+```
+
+Here since the prior distribution for $\mu$ consists of $m$ discrete values, we can calculate the **evidence** using a sum:
+\begin{equation}
+P(data) = \sum_{\textrm{i = i}^{m} \theta} P(data | \theta_i) \cdot P(\theta_i) 
+\end{equation}
+
+Calculating the evidence is where numerical integration comes into play. 
+.  
+```{r calculate posterior}
+Evidence <- sum(likelihood.prior)
+Posterior <- likelihood.prior/Evidence
+Posterior
+```
+Using the posterior, we can then plot our knowledge of the average size of the blocks of cheese. 
+```{r calculate max value}
+# where is maximum
+Parameter.max <- Init$Parameter[which.max(Posterior)]
+Parameter.max
+```
+
+We can also estimate the range of values that we are most confident. This is expressed in terms of a high density interval that contains 95\% of the posterior distribution (95\% HDI). We can summarize the results so far by plotting the prior and posterior distributions and annotate the graph with these key values of the parameter.
+
+```{r plot posterior}
+plot(Init$Parameter, Posterior, type = "p", col = "blue", xlab = "Parameter", ylab = "Probabilities")
+lines(c(0, Init$Parameter, 1), c(0, Init$Prior,0), col = "red")
+```
+
+#### (b) Calculate the posterior probability that $\mu < 1000$. 
+Given the posterior distribution, we can calculate this one-sided distribution by summing up all of the values for $\mu$ less than 1000. 
+```{r leftsum}
+# let's determine 95% High Density Interval
+idx <- 1
+leftsum = 0
+while (Init$Parameter[idx] < 1000){
+  leftsum = leftsum + likelihood.prior[idx]/Evidence
+  idx <- idx + 1
+}
+show(leftsum)
+```
+
+#### (c) Should you adjust the machine?
+One objective of statistics is to aid in decision making. Here the objective was to take a sample from a process that makes blocks of cheese, determine a credible interval for how well the process is performing, and, based on design objectives, make a decision to adjust the process. Here the design objective is that the process makes no more than 1% of cheese blocks greater than 1000 grams. Based on the posterior distribution, the process makes out-of-spec blocks `r 100*(1 - leftsum)`% of the time. As this value is greater than 1%, we should adjust the machine to make smaller blocks of cheese. 
+
+#### (d) Additional Problems
+- Calculate the two measures of central tendency: posterior median and posterior mean.
+\begin{equation}
+\int_0^{median} P(\theta|data) d\theta = 0.5\\
+mean = \int_{\textrm{all }\theta} \theta \cdot P(\theta|data) d\theta
+\end{equation}
+- Calculate a measure of spread, such as the posterior variance.
+\begin{equation}
+\int_0^{median} P(\theta|data) d\theta = 0.5\\
+Var(\theta|data) = \int_{\textrm{all }\theta} (\theta - mean) \cdot P(\theta|data) d\theta
+\end{equation}
+
+### Estimating the mean when the measurement uncertainty is unknown
+Let's consider the following problem: The current process used for making a polymer product has specifications that it contains 35% polymer. You are the engineer responsible for developing a modified process. You run the process on 10 batches and measure the percentage polymer in each batch. The values are:
+```{r data 2}
+sample2 <- c(38.7, 40.4, 37.2, 36.6, 35.9, 34.7, 37.6, 35.1, 37.5, 35.6)
+show(sample2)
+```
+Based on past experience, you know that the polymer in each batch is normally distributed but you don't know the average value and standard deviation.  
+
+#### a) Find the joint posterior distribution
+First, let's use flat priors for both $\mu$ and $\sigma$. The prior for $\mu$ will be centered at the sample mean and standard deviation. The prior for $\sigma$ will start at small non-zero positive value (0.001) and end at $4 \cdot s$. A small non-zero positive value for $\sigma$ ensures that the calculated likelihood is defined. As these two unknown parameters are considered continuous random variables, we will have to use a numerical approach to do the integration. A trapezoidal approach will be used with an $n \times n$ grid.   
+```{r prior 2}
+yb <- mean(sample2)
+n2 <- length(sample2)
+s2 <- sum((sample2 - yb)^2) / (n2 - 1)
+
+n <- 100 # grid points
+# mu is parameter 1 and sigma is parameter 2
+h1 <- (8*s2)/n
+h2 <- (4*s2 - 0.001)/n
+mui <- seq(yb - 4*s2, yb + 4*s2, by = h1)
+sgi <- seq(0.001, 4*s2, by = h2)
+wij <- matrix(c(0.25, rep(0.5, n-1), 0.25, rep(c(0.5, rep(1, n-1), 0.5), n-1), 
+              0.25, rep(0.5, n-1), 0.25), nrow = n+1, ncol = n+1, byrow = TRUE)
+mu.vec <- matrix(data = mui, nrow = n+1, ncol = n+1, byrow = FALSE)
+# assuming prior values are equal to 1 - the particular value will cancel out
+mu.prior <- matrix(data = 1, nrow = n+1, ncol = n+1, byrow = FALSE)
+
+sg.vec <- matrix(data = sgi, nrow = n+1, ncol = n+1, byrow = TRUE)
+sg.prior <- matrix(data = 1, nrow = n+1, ncol = n+1, byrow = TRUE)
+
+theta.vec <- data.frame(mu = as.vector(mu.vec), sigma = as.vector(sg.vec), prior = as.vector(mu.prior)*as.vector(sg.prior))
+```
+We could plot the prior distribution, but this gives a rather uninteresting contour plot as all of the z-values are the same. Next we will calculate the likelihood for every combination of parameter values and do the integration to estimate the ***Evidence***. 
+```{r likelihood 2}
+likelihood <- function(mu, sigma, ybar, s, n){
+  res <- (1/(2 * pi * sigma^2)^n) * exp(- ((n - 1)*s^2 + n*(ybar - mu)^2)/(2*sigma^2))
+  return(res)
+}
+
+likelihood.prior.vec <- apply(theta.vec, 1, function(x) likelihood(x['mu'], x['sigma'], yb, s2, n2) * x['prior'])
+
+Evidence <- h1*h2*sum(as.vector(wij)*likelihood.prior.vec)
+```
+Using the ***Evidence*** we can then plot the posterior distribution over the range of parameter values.
+```{r plot posterior 2}
+Posterior <- likelihood.prior.vec/Evidence
+
+contour(mui, sgi, matrix(Posterior, nrow = n+1, ncol = n+1, byrow = FALSE), col = "red")
+```
+
+Now let's use non-flat priors for $\mu$ and $\sigma$. The Central Limit Theorem implies that irrespective of the generating distribution, an average value of a set of samples is normally distributed. We will then use a normal distribution for the prior of $\mu$ centered at $\bar{y}$ with the standard deviation set to the sample standard deviation $s$. The variance is a positive continuous random variable that we think exhibits a Gamma distribution. We will use a shape parameter equal to 1.5 and a scale parameter equal to $s$/1.5 such that the Gamma distribution is centered at $s$.
+
+```{r prior 3}
+mu.prior <- matrix(data = dnorm(mui, mean = yb, sd = s2), nrow = n+1, ncol = n+1, byrow = FALSE)
+
+sg.prior <- matrix(data = dgamma(sgi, shape = 2, scale = s2/2), nrow = n+1, ncol = n+1, byrow = TRUE)
+
+theta.vec2 <- data.frame(mu = as.vector(mu.vec), sigma = as.vector(sg.vec), prior = as.vector(mu.prior)*as.vector(sg.prior))
+```
+Now we can plot the prior as it has changing values within the parameter space.
+```{r plot prior}
+contour(mui, sgi, mu.prior*sg.prior, xlab = "mu", ylab = "sigma")
+```
+Given this new prior, we can calculate the likelihood for every combination of parameters.
+```{r calculate likelihood 3}
+likelihood.prior.vec2 <- apply(theta.vec2, 1, function(x) likelihood(x['mu'], x['sigma'], yb, s2, n2) * x['prior'])
+
+Evidence2 <- h1*h2*sum(as.vector(wij)*likelihood.prior.vec2)
+```
+Using the ***Evidence*** we can then plot the posterior distribution over the range of parameter values.
+```{r plot posterior 3}
+Posterior2 <- likelihood.prior.vec2/Evidence2
+
+contour(mui, sgi, mu.prior*sg.prior, xlab = "mu", ylab = "sigma")
+contour(mui, sgi, matrix(Posterior2, nrow = n+1, ncol = n+1, byrow = FALSE), add = TRUE, col = "red")
+```
+As I mentioned in class, the data data that you have helps swamp the prior. Which means that the particular shape of the prior may not matter very much. What is important is that the particular values that end up having the high density region of the posterior must have a non-zero chance of being selected. That is they can't have zero value for the prior. You can check this by comparing the posterior to the prior distributions. If the posterior seems to reside near the edge where the prior goes to zero, it might be good to redo the analysis and move the prior so that the posterior isn't right at the edge. Here in this figure, we can see that the posterior is centered in the middle of the prior, so our selection of prior was appropriate.
+
+#### b) Decision making using the posterior distribution.
+
+The process manager wants to know if the modified process increases the mean yield. Using a 5% chance that you are not correct, can you claim that the modified process increases the yield?
+
+To answer this question, we can integrate the posterior distribution for all values of $\sigma$ and values for $\mu$ greater than 35. To say that the modified process has increased the yield, the remaining area of the posterior distribution should be less than 5%. This question is related to one-sided hypothesis testing in the context of conventional null hypothesis significant tests.
+
+```{r hypothesis test}
+# Making sure that the posterior sums to 1
+h1*h2*sum(Posterior2)
+
+# Summing up the posterior with values of mu greater than 35
+result <- h1*h2*sum(Posterior2[theta.vec2$mu > 35])
+```
+The calculations suggest that `r 100*(1 - result)`% of the posterior distribution falls with $\mu \le 35$. We can then conclude that the modified process has increased the percent of polymer in the product. 
+
+### Problems
+
+1. In a research program on human health risk from recreational contact with water contaminated with pathogenic microbiological material, the National Institute of Water and Atmosphere (NIWA) in New Zealand instituted a study to determine the quality of water at a variety of catchment types. In a site identified as having a heavy environmental impact from seagulls and waterfowl, 116 one-liter water samples were acquired an analyzed. Out of those samples, 17 samples contained pathogenic *Giardia* cysts. 
++ What distribution can be used to describe the number of samples containing *Giardia* cysts?
++ Let $\theta$ be the probability that a one-liter water sample from this type of site contains *Giardia* cysts. Use a uniform prior for $\theta$. Find the posterior distribution of $\theta$, given the data.
++ Summarize the posterior distribution by its first two moments.
++ Compare the posterior distribution in $\theta$ against a normal distribution parameterized by the first two moments. Quantitatively compare the distributions.
++ Compute a 95% high density interval for $\theta$
+
+2. An engineer takes a sample of 5 steel I beams from a batch, and measured the amount they sag under a standard load. The amounts in mm are: 5.19, 4.72, 4.81, 4.87, 4.88. It is known that the sag follows a normal distribution.
++ Use a normal prior for $\mu$ and a flat prior for $\sigma$ informed by the sample mean and standard deviation. Find the posterior distribution of the parameters.
++ For a batch of I beams to be acceptable, the mean sag under the standard load must be less than 5.20. Explicitly state your decision making criteria.
++ Make a decision, assuming that you have a 5% chance of being wrong.
