@@ -1,0 +1,151 @@
+---
+title: "Solution to Bayesian Inference problems"
+author: "David Klinke"
+date: "2022-10-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list = ls())
+```
+
+1. In a research program on human health risk from recreational contact with water contaminated with pathogenic microbiological material, the National Institute of Water and Atmosphere (NIWA) in New Zealand instituted a study to determine the quality of water at a variety of catchment types. In a site identified as having a heavy environmental impact from seagulls and waterfowl, 116 one-liter water samples were acquired an analyzed. Out of those samples, 17 samples contained pathogenic *Giardia* cysts. 
++ What distribution can be used to describe the number of samples containing *Giardia* cysts?
+
+Since the outcome seems to be whether or not the samples contain pathogenic *Giardia* cysts, the observations are likely to be described by a binomial distribution with n = 116 and the probability of obtaining a contaminated sample equal to $\theta$. 
+
++ Let $\theta$ be the probability that a one-liter water sample from this type of site contains *Giardia* cysts. Use a uniform prior for $\theta$. Find the posterior distribution of $\theta$, given the data.
+
+```{r set up prior, echo=TRUE}
+Param <- seq(0, 1, by = 0.01)
+Prior <- rep(1, length(Param))
+Init <- data.frame(Parameter = Param, Prior = Prior)
+# add some zeros to the front and end to make the plot prettier
+plot(c(0, Init$Parameter, 1), c(0, Init$Prior, 0), type = "l", col = "red", xlab = "Parameter Value", ylab = "P(theta)", ylim = c(0, 3))
+```
+
+The **likelihood** corresponds to the likelihood for observing data similar to that actually observed (17 "successes" in 116 trials), given a particular value of the model parameter. 
+```{r calculate likelihood*prior, echo=TRUE}
+likelihood.prior <- apply(Init, 1, function(x) dbinom(17, 116, x['Parameter']) * x['Prior'])
+
+ntrap <- length(likelihood.prior) - 1
+h <- (1 - 0)/ntrap
+Evidence <- h*(likelihood.prior[1]/2 + sum(likelihood.prior[2:ntrap]) + likelihood.prior[ntrap+1]/2)
+
+Posterior <- likelihood.prior/Evidence
+plot(Init$Parameter, Posterior, type = "p", col = "blue", xlab = "Parameter", ylab = "Posterior")
+
+```
+
++ Summarize the posterior distribution by its first two moments.
+```{r first two momemnts}
+# where is maximum
+Mean <- sum(Init$Parameter * Posterior)*h
+Sigma <- sqrt(sum((Init$Parameter - Mean)^2 * Posterior)*h)
+```
+
++ Compare the posterior distribution in $\theta$ against a normal distribution parameterized by the first two moments. Quantitatively compare the distributions.
+
+```{r compare normal to posterior}
+plot(Init$Parameter, Posterior, type = "p", col = "blue", xlab = "Parameter", ylab = "Posterior")
+lines(Init$Parameter, dnorm(Init$Parameter, mean = Mean, sd = Sigma), col = "red")
+```
+
++ Compute a 95% high density interval for $\theta$
+
+```{r calculate high density interval}
+# let's determine 95% High Density Interval
+lx <- 2
+lefttail = 0
+while (lefttail < 0.025){
+  if(lx == 2){
+    lefttail = h/2*sum(likelihood.prior[1:lx])/Evidence
+  } else {
+    lefttail = h/2*(likelihood.prior[1] + 2*sum(likelihood.prior[2:lx-1]) + likelihood.prior[lx])/Evidence
+  }
+  lx <- lx + 1
+}
+
+rx <- length(likelihood.prior)
+righttail = 1
+while (righttail > 0.975){
+  righttail = h/2*(likelihood.prior[1] + 2*sum(likelihood.prior[2:rx-1]) + likelihood.prior[rx])/Evidence
+  rx <- rx - 1
+}
+
+plot(Init$Parameter, Posterior, type = "p", col = "blue", xlab = "Parameter", ylab = "Probabilities")
+lines(c(Init$Parameter[lx], Init$Parameter[rx]), c(1.5, 1.5), lwd = 2, lty = 2, col = "black")
+lines(c(Init$Parameter[lx], Init$Parameter[lx]), c(0, 5), lwd = 2, lty = 1, col = "black")
+lines(c(Init$Parameter[rx], Init$Parameter[rx]), c(0, 5), lwd = 2, lty = 1, col = "black")
+text(Init$Parameter[lx]-0.05, 1.7, label = as.character(Init$Parameter[lx]))
+text(Init$Parameter[rx]+0.05, 1.7, label = as.character(Init$Parameter[rx]))
+```
+
+
+2. An engineer takes a sample of 5 steel I beams from a batch, and measured the amount they sag under a standard load. The amounts in mm are: 5.19, 4.72, 4.81, 4.87, 4.88. It is known that the sag follows a normal distribution.
++ Use a normal prior for $\mu$ and a flat prior for $\sigma$ informed by the sample mean and standard deviation. Find the posterior distribution of the parameters.
+
+```{r data problem 2}
+sample1 <- c(5.19, 4.72, 4.81, 4.87, 4.88)
+
+yb <- mean(sample1)
+n2 <- length(sample1)
+s2 <- sum((sample1 - yb)^2) / (n2 - 1)
+
+n <- 100 # grid points
+# mu is parameter 1 and sigma is parameter 2
+h1 <- (80*s2)/n
+h2 <- (4*s2 - 0.001)/n
+mui <- seq(yb - 40*s2, yb + 40*s2, by = h1)
+sgi <- seq(0.001, 4*s2, by = h2)
+wij <- matrix(c(0.25, rep(0.5, n-1), 0.25, rep(c(0.5, rep(1, n-1), 0.5), n-1), 
+              0.25, rep(0.5, n-1), 0.25), nrow = n+1, ncol = n+1, byrow = TRUE)
+mu.vec <- matrix(data = mui, nrow = n+1, ncol = n+1, byrow = FALSE)
+mu.prior <- matrix(data = dnorm(mui, mean = yb, sd = sqrt(s2)), nrow = n+1, ncol = n+1, byrow = FALSE)
+
+sg.vec <- matrix(data = sgi, nrow = n+1, ncol = n+1, byrow = TRUE)
+# assuming prior values are equal to 1 - the particular value will cancel out
+sg.prior <- matrix(data = 1, nrow = n+1, ncol = n+1, byrow = TRUE)
+
+theta.vec <- data.frame(mu = as.vector(mu.vec), sigma = as.vector(sg.vec), prior = as.vector(mu.prior)*as.vector(sg.prior))
+```
+
+We will calculate the likelihood for every combination of parameter values and do the integration to estimate the ***Evidence***. 
+```{r likelihood 2}
+likelihood <- function(mu, sigma, ybar, s, n){
+  res <- (1/(2 * pi * sigma^2)^n) * exp(- ((n - 1)*s^2 + n*(ybar - mu)^2)/(2*sigma^2))
+  return(res)
+}
+
+likelihood.prior.vec <- apply(theta.vec, 1, function(x) likelihood(x['mu'], x['sigma'], yb, s2, n2) * x['prior'])
+
+Evidence <- h1*h2*sum(as.vector(wij)*likelihood.prior.vec)
+```
+
+Using the ***Evidence*** we can then plot the posterior distribution over the range of parameter values.
+```{r plot posterior 2}
+Posterior <- likelihood.prior.vec/Evidence
+
+contour(mui, sgi, matrix(Posterior, nrow = n+1, ncol = n+1, byrow = FALSE), col = "red", xlab = "Mean", ylab = "Sigma")
+```
+
++ For a batch of I beams to be acceptable, the mean sag under the standard load must be less than 5.20. Explicitly state your decision making criteria.
+
+The two alternative hypotheses are:
+\begin{eqnarray}
+ H_0: \textrm{mean sag} < 5.20\\
+ H_1: \textrm{mean sag} \ge 5.20
+\end{eqnarray}
+
++ Make a decision, assuming that you have a 5% chance of being wrong.
+
+```{r hypothesis test}
+# Making sure that the posterior sums to 1
+h1*h2*sum(Posterior)
+
+# Summing up the posterior with values of mu greater than or equal to 5.20
+result <- h1*h2*sum(Posterior[theta.vec$mu >= 5.20])
+```
+The calculations suggest that `r 100*result`% of the posterior distribution has a $\mu \ge 5.20$. We can then conclude that the measured sag of this batch of I beams is at an acceptable level. 
