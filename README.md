@@ -1,7 +1,9 @@
 # BayesStats
-R Markdown files for introducing Bayesian Statistics and Markov Chain Monte Carlo methods using R
+Author: David Klinke, West Virginia University
 
-Comprised of a series of Markdown files that progress over the following topics:
+R Markdown files for introducing Bayesian Statistics and Markov Chain Monte Carlo methods using R.
+
+This collection is comprised of a series of Markdown files that progress over the following topics:
 1) Bayesian approaches to common inferential questions involving:
 
     a) Binomial distributed random variable
