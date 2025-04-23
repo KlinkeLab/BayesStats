@@ -12,18 +12,20 @@ This collection is comprised of a series of Markdown files that progress over th
 
     c) Poisson distributed random variable
 
-    d) linear regression
+    d) Linear regression
 
-2) Bayesian approaches coupled with Markov Chain Monte Carlo methods to solve:
+    e) Some related solved problems 
 
-    a) General disussion
+3) Bayesian approaches coupled with Markov Chain Monte Carlo methods to solve:
+
+    a) General discussion
 
     b) Linear regression problems
 
-    c) Regression problem involving ordinary differential equations
+    c) Regression problem involving ordinary differential equations (still needs work)
 
     d) Regression problem involving differential algebraic equations
 
-3) Exploratory data analysis involving:
+4) Exploratory data analysis involving:
 
     a) Principal component analysis
