@@ -1,4 +1,4 @@
-# BayesStats
+# BayesStatsInR
 Author: David Klinke, West Virginia University
 
 R Markdown files for introducing Bayesian Statistics and Markov Chain Monte Carlo methods using R.
